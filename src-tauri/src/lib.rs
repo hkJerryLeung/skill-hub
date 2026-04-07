@@ -32,6 +32,11 @@ fn uninstall_skill(skill_path: String) -> Result<String, String> {
     scanner::uninstall_skill(&skill_path)
 }
 
+#[tauri::command]
+fn batch_migrate_skills(skills: Vec<SkillInfo>, target_agent: String) -> Result<String, String> {
+    scanner::batch_migrate_skills(skills, &target_agent)
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
@@ -42,7 +47,8 @@ pub fn run() {
             list_skill_files,
             get_agent_targets,
             install_skill,
-            uninstall_skill
+            uninstall_skill,
+            batch_migrate_skills
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

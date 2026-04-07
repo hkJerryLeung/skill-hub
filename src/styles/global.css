@@ -1,0 +1,131 @@
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap');
+
+:root {
+  /* Surfaces */
+  --bg-darkest: #060608;
+  --bg-darker: #0a0a0c;
+  --bg-dark: #0e0e10;
+  --bg-panel: #141416;
+  --bg-surface: #1a1a1e;
+  --bg-elevated: #222226;
+  --bg-hover: #2a2a30;
+  --bg-active: #33333a;
+
+  /* Borders */
+  --border-subtle: rgba(255, 255, 255, 0.06);
+  --border-default: rgba(255, 255, 255, 0.1);
+  --border-strong: rgba(255, 255, 255, 0.18);
+
+  /* Text */
+  --text-primary: #e8e8ec;
+  --text-secondary: #98989e;
+  --text-muted: #606068;
+  --text-disabled: #404048;
+
+  /* Accents */
+  --accent-primary: #990011;
+  --accent-primary-hover: #b30014;
+  --accent-secondary: #ff1a24;
+  --accent-highlight: #f5000a;
+  --accent-warning: #fdcb6e;
+  --accent-danger: #e17055;
+  --accent-success: #00b894;
+
+  /* Typography */
+  --font-xs: 0.6875rem; /* 11px */
+  --font-sm: 0.75rem;   /* 12px */
+  --font-md: 0.8125rem; /* 13px */
+  --font-lg: 0.9375rem; /* 15px */
+  --font-xl: 1.125rem;  /* 18px */
+  --font-2xl: 1.5rem;   /* 24px */
+
+  /* Spacing */
+  --sp-1: 4px;
+  --sp-2: 8px;
+  --sp-3: 12px;
+  --sp-4: 16px;
+  --sp-5: 20px;
+  --sp-6: 24px;
+  --sp-8: 32px;
+
+  /* Radius */
+  --radius-sm: 4px;
+  --radius-md: 6px;
+  --radius-lg: 10px;
+  --radius-xl: 14px;
+  --radius-full: 9999px;
+
+  /* Transitions */
+  --ease-out: cubic-bezier(0.22, 1, 0.36, 1);
+  --duration-fast: 120ms;
+  --duration-normal: 200ms;
+  --duration-slow: 350ms;
+
+  /* Shadows */
+  --shadow-sm: 0 1px 3px rgba(0,0,0,0.4);
+  --shadow-md: 0 4px 12px rgba(0,0,0,0.5);
+  --shadow-lg: 0 8px 30px rgba(0,0,0,0.6);
+  --shadow-glow: 0 0 20px rgba(255,26,36,0.3);
+}
+
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+html, body, #root {
+  height: 100%;
+  overflow: hidden;
+  background: var(--bg-darkest);
+}
+
+body {
+  font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  color: var(--text-primary);
+  -webkit-font-smoothing: antialiased;
+  user-select: none;
+}
+
+/* Scrollbar */
+::-webkit-scrollbar { width: 6px; height: 6px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb {
+  background: var(--border-default);
+  border-radius: 3px;
+}
+::-webkit-scrollbar-thumb:hover { background: var(--border-strong); }
+
+/* Utility classes or base component styles can be included if needed, 
+   but most styles will be co-located with their components. */
+
+/* Toast container base */
+.toast {
+  position: fixed;
+  bottom: var(--sp-6);
+  right: var(--sp-6);
+  padding: var(--sp-3) var(--sp-5);
+  border-radius: var(--radius-sm);
+  font-size: var(--font-md);
+  font-family: inherit;
+  z-index: 200;
+  animation: toastIn var(--duration-normal) var(--ease-out) forwards;
+  box-shadow: var(--shadow-lg);
+}
+
+.toast.success {
+  background: rgba(0, 184, 148, 0.15); /* var(--accent-success) with opacity */
+  border: 1px solid var(--accent-success);
+  color: var(--accent-success);
+}
+
+.toast.error {
+  background: rgba(225, 112, 85, 0.15); /* var(--accent-danger) with opacity */
+  border: 1px solid var(--accent-danger);
+  color: var(--accent-danger);
+}
+
+@keyframes toastIn {
+  from { transform: translateY(20px); opacity: 0; }
+  to { transform: translateY(0); opacity: 1; }
+}

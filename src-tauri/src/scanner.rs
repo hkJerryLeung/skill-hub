@@ -1,21 +1,23 @@
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 use std::fs;
 use std::path::{Path, PathBuf};
 
 /// Represents a single discovered skill
-#[derive(Debug, Clone, Serialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct SkillInfo {
     pub name: String,
     pub description: String,
     pub path: String,
     pub agent: String,
     pub is_symlink: bool,
+    pub category: Option<String>,
 }
 
 /// Known agent configurations
 struct AgentConfig {
     name: &'static str,
     skills_path: PathBuf,
+    recursive: bool,
 }
 
 /// Get the list of known agent skill directories
@@ -23,12 +25,29 @@ fn get_agent_configs() -> Vec<AgentConfig> {
     let home = dirs::home_dir().unwrap_or_default();
     vec![
         AgentConfig {
+            name: "Shared Library",
+            skills_path: home.join("SharedSkills"),
+            recursive: true,
+        },
+        AgentConfig {
             name: "Claude Code",
             skills_path: home.join(".claude").join("skills"),
+            recursive: false,
         },
         AgentConfig {
             name: "Antigravity",
             skills_path: home.join(".gemini").join("antigravity").join("skills"),
+            recursive: false,
+        },
+        AgentConfig {
+            name: "Codex",
+            skills_path: home
+                .join(".codex")
+                .join("vendor_imports")
+                .join("skills")
+                .join("skills")
+                .join(".curated"),
+            recursive: false,
         },
     ]
 }
@@ -62,47 +81,84 @@ fn parse_skill_description(skill_dir: &Path) -> String {
     String::from("No description")
 }
 
-/// Scan a single agent's skills directory
-fn scan_agent_skills(config: &AgentConfig) -> Vec<SkillInfo> {
+/// Scan a single agent's skills directory (flat)
+fn scan_flat(config: &AgentConfig) -> Vec<SkillInfo> {
     let mut skills = Vec::new();
-
     if !config.skills_path.exists() {
         return skills;
     }
-
     let entries = match fs::read_dir(&config.skills_path) {
         Ok(e) => e,
         Err(_) => return skills,
     };
-
     for entry in entries.flatten() {
         let path = entry.path();
-        if !path.is_dir() {
-            continue;
-        }
-
-        let name = path
-            .file_name()
-            .unwrap_or_default()
-            .to_string_lossy()
-            .to_string();
-
-        let is_symlink = entry
-            .file_type()
-            .map(|ft| ft.is_symlink())
-            .unwrap_or(false);
-
+        if !path.is_dir() { continue; }
+        let name = path.file_name().unwrap_or_default().to_string_lossy().to_string();
+        let is_symlink = entry.file_type().map(|ft| ft.is_symlink()).unwrap_or(false);
         let description = parse_skill_description(&path);
-
         skills.push(SkillInfo {
-            name,
-            description,
+            name, description,
             path: path.to_string_lossy().to_string(),
             agent: config.name.to_string(),
             is_symlink,
+            category: None,
         });
     }
+    skills.sort_by(|a, b| a.name.cmp(&b.name));
+    skills
+}
 
+/// Scan recursively — supports category folders (one level deep)
+/// e.g. SharedSkills/security/007/SKILL.md → category="security"
+fn scan_recursive(config: &AgentConfig) -> Vec<SkillInfo> {
+    let mut skills = Vec::new();
+    if !config.skills_path.exists() {
+        return skills;
+    }
+    let entries = match fs::read_dir(&config.skills_path) {
+        Ok(e) => e,
+        Err(_) => return skills,
+    };
+    for entry in entries.flatten() {
+        let path = entry.path();
+        if !path.is_dir() { continue; }
+        let dir_name = path.file_name().unwrap_or_default().to_string_lossy().to_string();
+        let is_symlink = entry.file_type().map(|ft| ft.is_symlink()).unwrap_or(false);
+
+        // Check if this is a skill (has SKILL.md) or a category folder
+        if path.join("SKILL.md").exists() {
+            // Direct skill at root level (no category)
+            let description = parse_skill_description(&path);
+            skills.push(SkillInfo {
+                name: dir_name, description,
+                path: path.to_string_lossy().to_string(),
+                agent: config.name.to_string(),
+                is_symlink,
+                category: None,
+            });
+        } else {
+            // Treat as category folder — scan one level deeper
+            let category_name = dir_name;
+            if let Ok(sub_entries) = fs::read_dir(&path) {
+                for sub_entry in sub_entries.flatten() {
+                    let sub_path = sub_entry.path();
+                    if !sub_path.is_dir() { continue; }
+                    if !sub_path.join("SKILL.md").exists() { continue; }
+                    let sub_name = sub_path.file_name().unwrap_or_default().to_string_lossy().to_string();
+                    let sub_symlink = sub_entry.file_type().map(|ft| ft.is_symlink()).unwrap_or(false);
+                    let description = parse_skill_description(&sub_path);
+                    skills.push(SkillInfo {
+                        name: sub_name, description,
+                        path: sub_path.to_string_lossy().to_string(),
+                        agent: config.name.to_string(),
+                        is_symlink: sub_symlink,
+                        category: Some(category_name.clone()),
+                    });
+                }
+            }
+        }
+    }
     skills.sort_by(|a, b| a.name.cmp(&b.name));
     skills
 }
@@ -111,11 +167,13 @@ fn scan_agent_skills(config: &AgentConfig) -> Vec<SkillInfo> {
 pub fn scan_all_skills() -> Vec<SkillInfo> {
     let configs = get_agent_configs();
     let mut all_skills = Vec::new();
-
     for config in &configs {
-        all_skills.extend(scan_agent_skills(config));
+        if config.recursive {
+            all_skills.extend(scan_recursive(config));
+        } else {
+            all_skills.extend(scan_flat(config));
+        }
     }
-
     all_skills
 }
 
@@ -250,4 +308,75 @@ pub fn uninstall_skill(skill_path: &str) -> Result<String, String> {
             .map_err(|e| format!("Failed to remove directory: {}", e))?;
         Ok(format!("Removed '{}' and all contents", skill_name))
     }
+}
+
+/// Batch migrate skills
+pub fn batch_migrate_skills(skills: Vec<SkillInfo>, target_agent: &str) -> Result<String, String> {
+    let configs = get_agent_configs();
+    let target_config = configs
+        .iter()
+        .find(|c| c.name == target_agent)
+        .ok_or_else(|| format!("Target agent '{}' not found", target_agent))?;
+
+    let mut success_count = 0;
+
+    for skill in skills {
+        let source_path = Path::new(&skill.path);
+        if !source_path.exists() {
+            continue;
+        }
+
+        let skill_name = source_path
+            .file_name()
+            .unwrap_or_default()
+            .to_string_lossy()
+            .to_string();
+
+        if target_config.name == "Shared Library" && skill.agent != "Shared Library" {
+            // We want to physically move it to Shared Library, then leave a symlink
+            let target_dir = if let Some(cat) = &skill.category {
+                target_config.skills_path.join(cat)
+            } else {
+                target_config.skills_path.clone()
+            };
+
+            if !target_dir.exists() {
+                let _ = fs::create_dir_all(&target_dir);
+            }
+
+            let dest_path = target_dir.join(&skill_name);
+
+            if dest_path.exists() {
+                continue;
+            }
+
+            if !skill.is_symlink {
+                // Move physical directory
+                if fs::rename(&source_path, &dest_path).is_err() {
+                    // Ignore fallback for now, rename should work across home dir usually
+                    continue; 
+                }
+
+                // Put symlink back in original spot
+                #[cfg(unix)]
+                let _ = std::os::unix::fs::symlink(&dest_path, &source_path);
+                #[cfg(windows)]
+                let _ = std::os::windows::fs::symlink_dir(&dest_path, &source_path);
+
+                success_count += 1;
+            } else {
+                // If dragging a symlink to Shared Library, just drop a symlink there
+                if let Ok(_) = install_skill(&skill.path, "Shared Library", true) {
+                    success_count += 1;
+                }
+            }
+        } else {
+            // Dragging to standard agent (or from Shared Library to standard) -> Just symlink
+            if let Ok(_) = install_skill(&skill.path, target_agent, true) {
+                success_count += 1;
+            }
+        }
+    }
+
+    Ok(format!("Migrated {} skills", success_count))
 }
