@@ -4,7 +4,8 @@ import { resolveSidebarTargetFromPoint } from "../src/lib/dragDropState.ts";
 const rects = [
   { agentKey: "all", left: 0, right: 220, top: 0, bottom: 40 },
   { agentKey: "Shared Library", left: 0, right: 220, top: 41, bottom: 80 },
-  { agentKey: "Codex", left: 0, right: 220, top: 81, bottom: 120 },
+  { agentKey: "shared-category:data-analysis", left: 12, right: 220, top: 81, bottom: 120 },
+  { agentKey: "Codex", left: 0, right: 220, top: 121, bottom: 160 },
 ];
 
 assert.equal(
@@ -14,6 +15,11 @@ assert.equal(
 
 assert.equal(
   resolveSidebarTargetFromPoint(rects, { clientX: 120, clientY: 100 }),
+  "shared-category:data-analysis",
+);
+
+assert.equal(
+  resolveSidebarTargetFromPoint(rects, { clientX: 120, clientY: 140 }),
   "Codex",
 );
 

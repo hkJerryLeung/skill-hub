@@ -7,6 +7,7 @@ export function buildBrowserSkillPresentation(
   agentFilter: string,
   search: string,
   statusFilter: StatusFilter,
+  sharedCategory: string | null = null,
 ) {
   const normalizedSearch = search.trim().toLowerCase();
   const searchScopedSkills =
@@ -18,5 +19,5 @@ export function buildBrowserSkillPresentation(
             skill.description.toLowerCase().includes(normalizedSearch),
         );
 
-  return buildSkillPresentation(searchScopedSkills, agentFilter, statusFilter);
+  return buildSkillPresentation(searchScopedSkills, agentFilter, statusFilter, sharedCategory);
 }

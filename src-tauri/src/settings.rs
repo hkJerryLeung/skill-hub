@@ -61,13 +61,18 @@ pub enum StartupStatusFilter {
     Updates,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 #[serde(default)]
 pub struct AppSettings {
     pub shared_library_path: String,
     pub theme_mode: ThemeMode,
     pub reduce_motion: bool,
     pub auto_check_updates_on_launch: bool,
+    pub categorization_enabled: bool,
+    pub categorization_base_url: String,
+    pub categorization_model: String,
+    pub categorization_api_key: String,
+    pub categorization_confidence_threshold: f64,
     pub startup_view: StartupView,
     pub startup_status_filter: StartupStatusFilter,
     pub restore_last_session: bool,
@@ -83,6 +88,11 @@ impl Default for AppSettings {
             theme_mode: ThemeMode::Dark,
             reduce_motion: false,
             auto_check_updates_on_launch: true,
+            categorization_enabled: false,
+            categorization_base_url: String::new(),
+            categorization_model: String::new(),
+            categorization_api_key: String::new(),
+            categorization_confidence_threshold: 0.7,
             startup_view: StartupView::All,
             startup_status_filter: StartupStatusFilter::All,
             restore_last_session: true,

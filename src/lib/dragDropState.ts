@@ -3,7 +3,8 @@ export type DragSidebarTarget =
   | "Claude Code"
   | "Antigravity"
   | "Codex"
-  | "Shared Library";
+  | "Shared Library"
+  | `shared-category:${string}`;
 
 export interface DragLeaveSnapshot {
   currentDropTarget: DragSidebarTarget | null;
@@ -107,6 +108,10 @@ export function resolveMigrationBatch<T extends MigrationBatchSkill>(
 export function resolveSidebarDropTargetKey(
   agentKey: string | null | undefined,
 ): DragSidebarTarget | null {
+  if (agentKey?.startsWith("shared-category:")) {
+    return agentKey as DragSidebarTarget;
+  }
+
   switch (agentKey) {
     case "Shared Library":
     case "Claude Code":

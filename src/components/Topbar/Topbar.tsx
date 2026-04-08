@@ -5,6 +5,7 @@ import { StatusCounts, StatusFilter } from '../../lib/skillFilters';
 
 interface TopbarProps {
   filter: AgentFilter;
+  sharedCategoryLabel: string | null;
   search: string;
   setSearch: (s: string) => void;
   statusFilter: StatusFilter;
@@ -14,14 +15,18 @@ interface TopbarProps {
   refreshLabel: string;
   checkingAll: boolean;
   updatingAll: boolean;
+  autoCategorizing: boolean;
+  categorizationEnabled: boolean;
   onStatusFilterChange: (filter: StatusFilter) => void;
   onRefresh: () => void;
   onCheckUpdates: () => void;
   onUpdateAll: () => void;
+  onAutoCategorize: () => void;
 }
 
 export function Topbar({
   filter,
+  sharedCategoryLabel,
   search,
   setSearch,
   statusFilter,
@@ -31,18 +36,41 @@ export function Topbar({
   refreshLabel,
   checkingAll,
   updatingAll,
+  autoCategorizing,
+  categorizationEnabled,
   onStatusFilterChange,
   onRefresh,
   onCheckUpdates,
   onUpdateAll,
+  onAutoCategorize,
 }: TopbarProps) {
   const showTypeFilters = filter !== "Shared Library";
+  const title =
+    filter === "Shared Library" && sharedCategoryLabel
+      ? `Shared Library / ${sharedCategoryLabel}`
+      : filter === "all"
+        ? "All Skills"
+        : filter;
 
   return (
     <div className="topbar-container">
       <div className="topbar">
-        <h2>{filter === "all" ? "All Skills" : filter}</h2>
+        <h2>{title}</h2>
         <div className="topbar-actions">
+          {filter === "Shared Library" && (
+            <button
+              className="topbar-btn"
+              onClick={onAutoCategorize}
+              disabled={!categorizationEnabled || autoCategorizing}
+              title={
+                categorizationEnabled
+                  ? "Run semantic categorization for visible shared skills"
+                  : "Enable categorization in Settings first"
+              }
+            >
+              {autoCategorizing ? "Categorizing..." : "Auto Categorize"}
+            </button>
+          )}
           <button className="topbar-btn" onClick={onCheckUpdates} disabled={checkingAll || updatingAll}>
             {checkingAll ? "Checking..." : "Check Updates"}
           </button>

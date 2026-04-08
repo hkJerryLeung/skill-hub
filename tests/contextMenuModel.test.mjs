@@ -19,6 +19,14 @@ assert.deepStrictEqual(
   ["open", "reveal", "rescan", "check-updates", "update-all"],
 );
 
+assert.deepStrictEqual(
+  buildSidebarAgentMenuItems({
+    agent: "Shared Library",
+    targets,
+  }).map((item) => item.id),
+  ["open", "reveal", "rescan", "check-updates", "update-all", "auto-categorize"],
+);
+
 const singleSkillMenu = buildSkillMenuItems({
   selectedSkills: [
     {

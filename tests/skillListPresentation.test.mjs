@@ -6,11 +6,14 @@ import {
 const sharedLocal = {
   name: "007",
   description: "Shared security skill",
-  path: "/Users/example/SharedSkills/007",
-  canonical_path: "/Users/example/SharedSkills/007",
+  path: "/Users/example/SharedSkills/security-systems/007",
+  canonical_path: "/Users/example/SharedSkills/security-systems/007",
   agent: "Shared Library",
   is_symlink: false,
-  category: null,
+  category: "security-systems",
+  category_assignment_mode: "auto",
+  category_confidence: 0.85,
+  category_classified_at: "2026-04-08T00:00:00Z",
   version: "1.0.0",
   source: null,
   update_capability: "manual",
@@ -41,6 +44,9 @@ const localSkill = {
   canonical_path: "/Users/example/.claude/skills/find-skills",
   agent: "Claude Code",
   is_symlink: false,
+  category_assignment_mode: null,
+  category_confidence: null,
+  category_classified_at: null,
   version: null,
   update_status: "unversioned",
 };
@@ -103,6 +109,18 @@ assert.deepStrictEqual(presentedShared.statusCounts, {
   local: 0,
   updates: 0,
 });
+
+const presentedSharedCategory = buildSkillPresentation(
+  [sharedLocal, claudeSymlink, codexSymlink, localSkill],
+  "Shared Library",
+  "all",
+  "security-systems",
+);
+
+assert.deepStrictEqual(
+  presentedSharedCategory.skills.map((skill) => skill.name),
+  ["007"],
+);
 
 const presentedUnlinkedShared = buildSkillPresentation([sharedLocal], "Shared Library");
 

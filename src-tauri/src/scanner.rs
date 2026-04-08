@@ -1,8 +1,22 @@
+use crate::categorizer;
 use crate::settings;
 use serde::{Deserialize, Serialize};
 use std::collections::{BTreeMap, HashSet};
 use std::fs;
 use std::path::{Path, PathBuf};
+
+const SHARED_LIBRARY_CATEGORY_SLUGS: &[&str] = &[
+    "document-processing",
+    "development-code-tools",
+    "data-analysis",
+    "business-marketing",
+    "communication-writing",
+    "creative-media",
+    "productivity-organization",
+    "collaboration-project-management",
+    "security-systems",
+    "uncategorized",
+];
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "snake_case")]
@@ -23,6 +37,28 @@ pub enum UpdateStatus {
     Error,
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum CategoryAssignmentMode {
+    Auto,
+    Manual,
+}
+
+#[derive(Debug, Default, Clone, Serialize, Deserialize, PartialEq)]
+pub struct CategoryAssignment {
+    pub mode: Option<CategoryAssignmentMode>,
+    pub slug: Option<String>,
+    pub confidence: Option<f64>,
+    pub classified_at: Option<String>,
+    pub reason: Option<String>,
+    pub model: Option<String>,
+}
+
+#[derive(Debug, Default, Clone, Serialize, Deserialize, PartialEq)]
+pub struct SkillHubMetadata {
+    pub category_assignment: Option<CategoryAssignment>,
+}
+
 /// Represents a single discovered skill
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct SkillInfo {
@@ -33,6 +69,9 @@ pub struct SkillInfo {
     pub agent: String,
     pub is_symlink: bool,
     pub category: Option<String>,
+    pub category_assignment_mode: Option<CategoryAssignmentMode>,
+    pub category_confidence: Option<f64>,
+    pub category_classified_at: Option<String>,
     pub version: Option<String>,
     pub source: Option<String>,
     pub update_capability: UpdateCapability,
@@ -47,6 +86,80 @@ struct SkillFrontmatter {
     description: Option<String>,
     version: Option<String>,
     source: Option<String>,
+}
+
+fn is_valid_shared_library_category_slug(value: &str) -> bool {
+    SHARED_LIBRARY_CATEGORY_SLUGS.contains(&value)
+}
+
+fn normalize_skill_hub_metadata(mut metadata: SkillHubMetadata) -> SkillHubMetadata {
+    let Some(assignment) = metadata.category_assignment.as_mut() else {
+        return metadata;
+    };
+
+    let Some(slug) = assignment.slug.as_deref() else {
+        metadata.category_assignment = None;
+        return metadata;
+    };
+
+    if !is_valid_shared_library_category_slug(slug) || assignment.mode.is_none() {
+        metadata.category_assignment = None;
+    }
+
+    metadata
+}
+
+fn parse_skill_hub_metadata(content: &str) -> SkillHubMetadata {
+    serde_json::from_str::<SkillHubMetadata>(content)
+        .map(normalize_skill_hub_metadata)
+        .unwrap_or_default()
+}
+
+fn read_skill_hub_metadata(skill_dir: &Path) -> SkillHubMetadata {
+    let metadata_path = skill_dir.join(".skill-hub.json");
+    let content = match fs::read_to_string(&metadata_path) {
+        Ok(content) => content,
+        Err(_) => return SkillHubMetadata::default(),
+    };
+
+    parse_skill_hub_metadata(&content)
+}
+
+fn write_skill_hub_metadata(skill_dir: &Path, metadata: &SkillHubMetadata) -> Result<(), String> {
+    let metadata_path = skill_dir.join(".skill-hub.json");
+    let json = serde_json::to_string_pretty(metadata)
+        .map_err(|error| format!("Failed to serialize skill metadata: {}", error))?;
+
+    fs::write(&metadata_path, json).map_err(|error| {
+        format!(
+            "Failed to write skill metadata '{}': {}",
+            metadata_path.display(),
+            error
+        )
+    })
+}
+
+fn write_category_assignment(
+    skill_dir: &Path,
+    mode: CategoryAssignmentMode,
+    slug: &str,
+    confidence: Option<f64>,
+    reason: Option<String>,
+    model: Option<String>,
+) -> Result<(), String> {
+    write_skill_hub_metadata(
+        skill_dir,
+        &SkillHubMetadata {
+            category_assignment: Some(CategoryAssignment {
+                mode: Some(mode),
+                slug: Some(slug.to_string()),
+                confidence,
+                classified_at: None,
+                reason,
+                model,
+            }),
+        },
+    )
 }
 
 /// Known agent configurations
@@ -512,6 +625,8 @@ fn build_skill_info(
     category: Option<String>,
 ) -> SkillInfo {
     let metadata = read_skill_metadata(skill_path);
+    let skill_hub_metadata = read_skill_hub_metadata(skill_path);
+    let category_assignment = skill_hub_metadata.category_assignment;
     let version = metadata.version;
     let source = metadata.source;
     let update_capability = classify_update_capability(source.as_deref());
@@ -532,6 +647,15 @@ fn build_skill_info(
         agent: agent.to_string(),
         is_symlink,
         category,
+        category_assignment_mode: category_assignment
+            .as_ref()
+            .and_then(|assignment| assignment.mode.clone()),
+        category_confidence: category_assignment
+            .as_ref()
+            .and_then(|assignment| assignment.confidence),
+        category_classified_at: category_assignment
+            .as_ref()
+            .and_then(|assignment| assignment.classified_at.clone()),
         version,
         source,
         update_capability,
@@ -645,7 +769,9 @@ fn repair_shared_library_links() -> Result<usize, String> {
             shared_skill,
             &skill_name,
             None,
-            LocalConflictStrategy::Skip,
+            // Shared Library is the source of truth. A scan should bring agent
+            // installs back into sync, including backing up same-name local copies.
+            LocalConflictStrategy::BackupAndReplace,
         )?
         .linked;
     }
@@ -875,6 +1001,55 @@ fn infer_skill_category(source_path: &str) -> Option<String> {
         .and_then(|skill| skill.category)
 }
 
+fn resolve_shared_library_install_category(
+    source_path: &str,
+    source: &Path,
+    settings: &settings::AppSettings,
+) -> (String, Option<f64>, Option<String>, Option<String>) {
+    if settings.categorization_enabled {
+        if let Ok(classification) = categorizer::categorize_skill_directory(source, settings) {
+            let slug = if is_valid_shared_library_category_slug(&classification.category_slug) {
+                classification.category_slug
+            } else {
+                String::from("uncategorized")
+            };
+            return (
+                slug,
+                classification.confidence,
+                classification.reason,
+                Some(settings.categorization_model.clone()),
+            );
+        }
+    }
+
+    (
+        infer_skill_category(source_path).unwrap_or_else(|| String::from("uncategorized")),
+        None,
+        None,
+        None,
+    )
+}
+
+fn resolve_shared_category_from_path(skill_path: &Path, shared_root: &Path) -> String {
+    let canonical_path = fs::canonicalize(skill_path).unwrap_or_else(|_| skill_path.to_path_buf());
+    let relative = canonical_path
+        .strip_prefix(shared_root)
+        .ok()
+        .and_then(|path| path.components().next());
+
+    match relative {
+        Some(std::path::Component::Normal(value)) => {
+            let slug = value.to_string_lossy().to_string();
+            if is_valid_shared_library_category_slug(&slug) {
+                slug
+            } else {
+                String::from("uncategorized")
+            }
+        }
+        _ => String::from("uncategorized"),
+    }
+}
+
 fn ensure_skill_in_shared_library(
     source_path: &Path,
     skill_name: &str,
@@ -1048,9 +1223,19 @@ pub fn install_skill(source_path: &str, target_agent: &str) -> Result<String, St
         .to_string();
 
     if target.name == "Shared Library" {
-        let category = infer_skill_category(source_path);
+        let app_settings = settings::load_settings().unwrap_or_default();
+        let (category, confidence, reason, model) =
+            resolve_shared_library_install_category(source_path, source, &app_settings);
         let shared_skill_path =
-            ensure_skill_in_shared_library(source, &skill_name, category.as_deref())?;
+            ensure_skill_in_shared_library(source, &skill_name, Some(&category))?;
+        write_category_assignment(
+            &shared_skill_path,
+            CategoryAssignmentMode::Auto,
+            &category,
+            confidence,
+            reason,
+            model,
+        )?;
         let sync = sync_shared_skill_to_agents(
             &shared_skill_path,
             &skill_name,
@@ -1101,6 +1286,240 @@ pub fn install_skill(source_path: &str, target_agent: &str) -> Result<String, St
     copy_dir_recursive(&resolved_source, &dest).map_err(|e| format!("Failed to copy: {}", e))?;
 
     Ok(format!("Copied '{}' to {}", skill_name, target_agent))
+}
+
+pub fn move_shared_skill_to_category(
+    skill_path: &str,
+    category_slug: &str,
+) -> Result<String, String> {
+    move_shared_skill_to_category_with_assignment(
+        skill_path,
+        category_slug,
+        CategoryAssignmentMode::Manual,
+        None,
+        None,
+        None,
+    )
+}
+
+fn move_shared_skill_to_category_with_assignment(
+    skill_path: &str,
+    category_slug: &str,
+    mode: CategoryAssignmentMode,
+    confidence: Option<f64>,
+    reason: Option<String>,
+    model: Option<String>,
+) -> Result<String, String> {
+    if !is_valid_shared_library_category_slug(category_slug) {
+        return Err(format!("Unknown shared library category: {}", category_slug));
+    }
+
+    let shared_root = get_shared_library_root()?;
+    let current_path = Path::new(skill_path);
+    let canonical_current_path = fs::canonicalize(current_path).map_err(|error| {
+        format!(
+            "Failed to resolve shared skill '{}': {}",
+            current_path.display(),
+            error
+        )
+    })?;
+
+    if !is_path_in_shared_library(&canonical_current_path, &shared_root) {
+        return Err(format!(
+            "Skill '{}' is not stored in Shared Library",
+            skill_path
+        ));
+    }
+
+    let skill_name = canonical_current_path
+        .file_name()
+        .ok_or("Invalid shared skill path")?
+        .to_string_lossy()
+        .to_string();
+    let target_dir = shared_root.join(category_slug);
+    let dest_path = target_dir.join(&skill_name);
+
+    fs::create_dir_all(&target_dir)
+        .map_err(|error| format!("Failed to create shared category dir: {}", error))?;
+
+    let final_path = if dest_path == canonical_current_path {
+        canonical_current_path.clone()
+    } else {
+        if dest_path.exists() || dest_path.is_symlink() {
+            return Err(format!(
+                "Skill '{}' already exists in Shared Library category '{}'",
+                skill_name, category_slug
+            ));
+        }
+
+        if let Err(rename_err) = fs::rename(&canonical_current_path, &dest_path) {
+            copy_dir_recursive(&canonical_current_path, &dest_path).map_err(|copy_err| {
+                format!(
+                    "Failed to move shared skill: {}; fallback copy failed: {}",
+                    rename_err, copy_err
+                )
+            })?;
+            fs::remove_dir_all(&canonical_current_path)
+                .map_err(|error| format!("Failed to remove old shared source after copy: {}", error))?;
+        }
+
+        remove_empty_shared_parent_dir(&canonical_current_path, &shared_root);
+        dest_path
+    };
+
+    write_category_assignment(
+        &final_path,
+        mode,
+        category_slug,
+        confidence,
+        reason,
+        model,
+    )?;
+    sync_shared_skill_to_agents(
+        &final_path,
+        &skill_name,
+        None,
+        LocalConflictStrategy::BackupAndReplace,
+    )?;
+
+    Ok(format!(
+        "Moved '{}' to Shared Library/{}",
+        skill_name, category_slug
+    ))
+}
+
+pub fn install_skill_to_shared_category(
+    source_path: &str,
+    category_slug: &str,
+) -> Result<String, String> {
+    if !is_valid_shared_library_category_slug(category_slug) {
+        return Err(format!("Unknown shared library category: {}", category_slug));
+    }
+
+    let source = Path::new(source_path);
+    let skill_name = source
+        .file_name()
+        .ok_or("Invalid source path")?
+        .to_string_lossy()
+        .to_string();
+    let shared_root = get_shared_library_root()?;
+    let canonical_source = fs::canonicalize(source).unwrap_or_else(|_| source.to_path_buf());
+
+    if is_path_in_shared_library(&canonical_source, &shared_root) {
+        return move_shared_skill_to_category(source_path, category_slug);
+    }
+
+    let shared_skill_path =
+        ensure_skill_in_shared_library(source, &skill_name, Some(category_slug))?;
+    write_category_assignment(
+        &shared_skill_path,
+        CategoryAssignmentMode::Manual,
+        category_slug,
+        None,
+        None,
+        None,
+    )?;
+    let sync = sync_shared_skill_to_agents(
+        &shared_skill_path,
+        &skill_name,
+        None,
+        LocalConflictStrategy::Skip,
+    )?;
+
+    Ok(format_shared_sync_message(&skill_name, &sync))
+}
+
+pub fn auto_categorize_shared_skills(skill_paths: Vec<String>) -> Result<String, String> {
+    let settings = settings::load_settings()?;
+    if !settings.categorization_enabled {
+        return Err(String::from("Categorization is disabled in Settings"));
+    }
+
+    let shared_root = get_shared_library_root()?;
+    let mut recategorized = 0;
+    let mut unchanged = 0;
+    let mut skipped_manual = 0;
+    let mut failed = 0;
+
+    for skill_path in skill_paths {
+        let skill_dir = PathBuf::from(&skill_path);
+        let canonical_path = match fs::canonicalize(&skill_dir) {
+            Ok(path) => path,
+            Err(_) => {
+                failed += 1;
+                continue;
+            }
+        };
+
+        if !is_path_in_shared_library(&canonical_path, &shared_root) || canonical_path.is_symlink() {
+            failed += 1;
+            continue;
+        }
+
+        let metadata = read_skill_hub_metadata(&canonical_path);
+        if metadata
+            .category_assignment
+            .as_ref()
+            .and_then(|assignment| assignment.mode.clone())
+            == Some(CategoryAssignmentMode::Manual)
+        {
+            skipped_manual += 1;
+            continue;
+        }
+
+        let classification = match categorizer::categorize_skill_directory(&canonical_path, &settings) {
+            Ok(result) => result,
+            Err(_) => {
+                failed += 1;
+                continue;
+            }
+        };
+
+        let target_slug = if is_valid_shared_library_category_slug(&classification.category_slug) {
+            classification.category_slug
+        } else {
+            String::from("uncategorized")
+        };
+        let current_slug = resolve_shared_category_from_path(&canonical_path, &shared_root);
+
+        if current_slug == target_slug {
+            if write_category_assignment(
+                &canonical_path,
+                CategoryAssignmentMode::Auto,
+                &target_slug,
+                classification.confidence,
+                classification.reason,
+                Some(settings.categorization_model.clone()),
+            )
+            .is_err()
+            {
+                failed += 1;
+                continue;
+            }
+            unchanged += 1;
+            continue;
+        }
+
+        if move_shared_skill_to_category_with_assignment(
+            canonical_path.to_string_lossy().as_ref(),
+            &target_slug,
+            CategoryAssignmentMode::Auto,
+            classification.confidence,
+            classification.reason,
+            Some(settings.categorization_model.clone()),
+        )
+        .is_ok()
+        {
+            recategorized += 1;
+        } else {
+            failed += 1;
+        }
+    }
+
+    Ok(format!(
+        "Auto-categorized {} skills, {} unchanged, {} manual skipped, {} failed",
+        recategorized, unchanged, skipped_manual, failed
+    ))
 }
 
 pub fn reconcile_shared_library_targets() -> Result<String, String> {
@@ -1259,6 +1678,7 @@ pub fn batch_migrate_skills(skills: Vec<SkillInfo>, target_agent: &str) -> Resul
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::settings::{self, AppSettings};
     use std::sync::{Mutex, OnceLock};
     use std::time::{SystemTime, UNIX_EPOCH};
 
@@ -1322,6 +1742,9 @@ mod tests {
             agent: String::from("Codex"),
             is_symlink,
             category: None,
+            category_assignment_mode: None,
+            category_confidence: None,
+            category_classified_at: None,
             version: None,
             source: None,
             update_capability: UpdateCapability::Manual,
@@ -1396,6 +1819,9 @@ mod tests {
                     agent: String::from("Antigravity"),
                     is_symlink: true,
                     category: None,
+                    category_assignment_mode: None,
+                    category_confidence: None,
+                    category_classified_at: None,
                     version: None,
                     source: None,
                     update_capability: UpdateCapability::Manual,
@@ -1407,7 +1833,7 @@ mod tests {
             )
             .unwrap();
 
-            let shared_copy = shared_dir.join("move-me");
+            let shared_copy = shared_dir.join("uncategorized").join("move-me");
             assert!(shared_copy.exists(), "shared library copy should exist");
             assert!(
                 !shared_copy.is_symlink(),
@@ -1460,7 +1886,7 @@ mod tests {
 
             install_skill(source_skill.to_string_lossy().as_ref(), "Shared Library").unwrap();
 
-            let shared_skill = shared_dir.join("share-me");
+            let shared_skill = shared_dir.join("uncategorized").join("share-me");
             assert!(shared_skill.exists(), "shared skill should exist");
             assert!(!shared_skill.is_symlink(), "shared skill should be real content");
 
@@ -1650,6 +2076,83 @@ mod tests {
     }
 
     #[test]
+    fn scanning_uses_configured_shared_library_path_and_replaces_antigravity_conflicts() {
+        with_temp_home(|home| {
+            let shared_dir = home.join("Mounted Skill Library");
+            let antigravity_dir = home.join(".gemini").join("antigravity").join("skills");
+
+            fs::create_dir_all(&shared_dir).unwrap();
+            fs::create_dir_all(&antigravity_dir).unwrap();
+
+            settings::save_settings(&AppSettings {
+                shared_library_path: shared_dir.to_string_lossy().to_string(),
+                ..AppSettings::default()
+            })
+            .unwrap();
+
+            let shared_target = get_agent_paths()
+                .into_iter()
+                .find(|target| target.name == "Shared Library")
+                .expect("missing Shared Library target");
+            assert_eq!(
+                shared_target.path,
+                shared_dir.to_string_lossy(),
+                "scanner should use the configured shared library path instead of the default"
+            );
+
+            let shared_skill = shared_dir.join("react-best-practices");
+            create_skill(&shared_skill);
+            fs::write(
+                shared_skill.join("SKILL.md"),
+                "---\nname: vercel-react-best-practices\nsource: https://github.com/vercel-labs/agent-skills/tree/main/skills/react-best-practices\n---\nbody",
+            )
+            .unwrap();
+
+            let antigravity_local = antigravity_dir.join("react-best-practices");
+            create_skill(&antigravity_local);
+            fs::write(
+                antigravity_local.join("SKILL.md"),
+                "---\nname: react-best-practices\nsource: community\n---\nbody",
+            )
+            .unwrap();
+
+            let scanned = scan_all_skills();
+
+            assert!(
+                antigravity_local.is_symlink(),
+                "scan should replace the conflicting Antigravity local copy with a shared symlink"
+            );
+            assert!(
+                shared_skill.exists(),
+                "shared skill should remain in the configured shared library after scan"
+            );
+            assert_eq!(
+                fs::read_link(&antigravity_local).unwrap(),
+                shared_skill,
+                "Antigravity conflict should be repointed to the configured shared library"
+            );
+
+            let antigravity_skill = scanned
+                .into_iter()
+                .find(|skill| skill.agent == "Antigravity" && skill.path == antigravity_local.to_string_lossy())
+                .expect("missing scanned Antigravity skill");
+            assert!(
+                antigravity_skill.is_symlink,
+                "scanned Antigravity skill should be marked as a symlink after repair"
+            );
+
+            let backups = fs::read_dir(&antigravity_dir)
+                .unwrap()
+                .flatten()
+                .map(|entry| entry.file_name().to_string_lossy().to_string())
+                .filter(|name| name.starts_with("react-best-practices.skill-hub-local-backup"))
+                .collect::<Vec<_>>();
+
+            assert_eq!(backups.len(), 1, "expected one backup of the local conflict");
+        });
+    }
+
+    #[test]
     fn migrating_shared_skill_to_agent_makes_target_local_and_removes_shared_links() {
         with_temp_home(|home| {
             let shared_dir = home.join("SharedSkills");
@@ -1678,6 +2181,9 @@ mod tests {
                     agent: String::from("Shared Library"),
                     is_symlink: false,
                     category: None,
+                    category_assignment_mode: None,
+                    category_confidence: None,
+                    category_classified_at: None,
                     version: None,
                     source: None,
                     update_capability: UpdateCapability::Manual,
@@ -1807,6 +2313,111 @@ body"#,
             metadata.source.as_deref(),
             Some("https://github.com/example/skills/tree/main/demo-skill")
         );
+    }
+
+    #[test]
+    fn category_sidecar_invalid_slug_falls_back_to_none() {
+        let metadata = parse_skill_hub_metadata(
+            r#"{"category_assignment":{"mode":"auto","slug":"wrong"}}"#,
+        );
+
+        assert!(metadata.category_assignment.is_none());
+    }
+
+    #[test]
+    fn installing_skill_to_shared_library_without_classifier_places_it_in_uncategorized() {
+        with_temp_home(|home| {
+            let shared_dir = home.join("SharedSkills");
+            let claude_dir = home.join(".claude").join("skills");
+            let antigravity_dir = home.join(".gemini").join("antigravity").join("skills");
+            let codex_dir = home.join(".codex").join("skills");
+
+            fs::create_dir_all(&claude_dir).unwrap();
+            fs::create_dir_all(&antigravity_dir).unwrap();
+            fs::create_dir_all(&codex_dir).unwrap();
+
+            let source_skill = claude_dir.join("share-me");
+            create_skill(&source_skill);
+
+            install_skill(source_skill.to_string_lossy().as_ref(), "Shared Library").unwrap();
+
+            let shared_skill = shared_dir.join("uncategorized").join("share-me");
+            assert!(shared_skill.exists(), "shared skill should exist in uncategorized");
+            assert!(
+                shared_skill.join(".skill-hub.json").exists(),
+                "shared install should write sidecar metadata"
+            );
+        });
+    }
+
+    #[test]
+    fn moving_shared_skill_to_new_category_updates_sidecar_and_relinks_agents() {
+        with_temp_home(|home| {
+            let shared_dir = home.join("SharedSkills");
+            let claude_dir = home.join(".claude").join("skills");
+            let antigravity_dir = home.join(".gemini").join("antigravity").join("skills");
+            let codex_dir = home.join(".codex").join("skills");
+
+            let shared_skill = shared_dir.join("uncategorized").join("move-me");
+            fs::create_dir_all(shared_skill.parent().unwrap()).unwrap();
+            fs::create_dir_all(&claude_dir).unwrap();
+            fs::create_dir_all(&antigravity_dir).unwrap();
+            fs::create_dir_all(&codex_dir).unwrap();
+
+            create_skill(&shared_skill);
+            write_skill_hub_metadata(
+                &shared_skill,
+                &SkillHubMetadata {
+                    category_assignment: Some(CategoryAssignment {
+                        mode: Some(CategoryAssignmentMode::Auto),
+                        slug: Some(String::from("uncategorized")),
+                        confidence: Some(0.51),
+                        classified_at: Some(String::from("2026-04-08T00:00:00Z")),
+                        reason: None,
+                        model: None,
+                    }),
+                },
+            )
+            .unwrap();
+
+            for linked_path in [
+                claude_dir.join("move-me"),
+                antigravity_dir.join("move-me"),
+                codex_dir.join("move-me"),
+            ] {
+                symlink_dir(&shared_skill, &linked_path);
+            }
+
+            move_shared_skill_to_category(
+                shared_skill.to_string_lossy().as_ref(),
+                "data-analysis",
+            )
+            .unwrap();
+
+            let moved_skill = shared_dir.join("data-analysis").join("move-me");
+            assert!(moved_skill.exists(), "shared skill should move to the new category");
+            assert!(
+                !shared_dir.join("uncategorized").join("move-me").exists(),
+                "old shared location should be removed"
+            );
+
+            let sidecar = fs::read_to_string(moved_skill.join(".skill-hub.json")).unwrap();
+            assert!(sidecar.contains("\"manual\""));
+            assert!(sidecar.contains("\"data-analysis\""));
+
+            for linked_path in [
+                claude_dir.join("move-me"),
+                antigravity_dir.join("move-me"),
+                codex_dir.join("move-me"),
+            ] {
+                assert!(linked_path.is_symlink(), "shared agent entry should remain a symlink");
+                assert_eq!(
+                    fs::canonicalize(&linked_path).unwrap(),
+                    fs::canonicalize(&moved_skill).unwrap(),
+                    "symlink should be repaired to the moved category path"
+                );
+            }
+        });
     }
 
     #[test]
