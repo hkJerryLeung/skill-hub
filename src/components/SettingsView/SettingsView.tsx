@@ -127,6 +127,83 @@ export function SettingsView({
           </label>
 
           <div className="settings-subsection">
+            <div className="settings-subsection-title">Auto Categorization</div>
+
+            <label className="settings-toggle">
+              <input
+                type="checkbox"
+                checked={draftSettings.categorization_enabled}
+                onChange={(event) =>
+                  onSettingsChange("categorization_enabled", event.target.checked)
+                }
+              />
+              <div>
+                <div className="settings-toggle-title">
+                  Enable semantic categorization
+                </div>
+                <div className="settings-toggle-help">
+                  Uses an OpenAI-compatible chat completion endpoint to assign a
+                  single Shared Library category when skills are imported or
+                  manually auto-categorized.
+                </div>
+              </div>
+            </label>
+
+            <label className="settings-field">
+              <span>Provider Base URL</span>
+              <input
+                type="text"
+                value={draftSettings.categorization_base_url}
+                onChange={(event) =>
+                  onSettingsChange("categorization_base_url", event.target.value)
+                }
+                placeholder="https://api.openai.com/v1"
+              />
+            </label>
+
+            <label className="settings-field">
+              <span>Model</span>
+              <input
+                type="text"
+                value={draftSettings.categorization_model}
+                onChange={(event) =>
+                  onSettingsChange("categorization_model", event.target.value)
+                }
+                placeholder="gpt-4.1-mini"
+              />
+            </label>
+
+            <label className="settings-field">
+              <span>API Key</span>
+              <input
+                type="password"
+                value={draftSettings.categorization_api_key}
+                onChange={(event) =>
+                  onSettingsChange("categorization_api_key", event.target.value)
+                }
+                placeholder="sk-..."
+              />
+            </label>
+
+            <label className="settings-field">
+              <span>Confidence Threshold</span>
+              <input
+                type="number"
+                min="0"
+                max="1"
+                step="0.05"
+                value={draftSettings.categorization_confidence_threshold}
+                onChange={(event) =>
+                  onSettingsChange(
+                    "categorization_confidence_threshold",
+                    Number(event.target.value),
+                  )
+                }
+              />
+            </label>
+          </div>
+
+          <div className="settings-subsection">
             <div className="settings-subsection-title">Known Agent Folders</div>
             <div className="settings-target-list">
               {targets.map((target) => (

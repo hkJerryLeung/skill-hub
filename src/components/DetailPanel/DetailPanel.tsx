@@ -1,6 +1,7 @@
 import './DetailPanel.css';
 import { revealItemInDir } from '@tauri-apps/plugin-opener';
 import { SkillInfo } from '../../lib/skillTypes';
+import { getSharedLibraryCategoryLabel } from '../../lib/sharedLibraryCategories';
 import { canAutoUpdate, formatLastChecked, getUpdateStatusLabel, getVersionLabel } from '../../lib/updatePresentation';
 import {
   CloseIcon,
@@ -122,6 +123,26 @@ export function DetailPanel({
               <div className="detail-meta-item">
                 <div className="label">Type</div>
                 <div className="value">{selected.is_symlink ? "SYMLINK" : "LOCAL"}</div>
+              </div>
+              <div className="detail-meta-item">
+                <div className="label">Category</div>
+                <div className="value">
+                  {getSharedLibraryCategoryLabel(
+                    selected.category ?? (selected.agent === "Shared Library" ? "uncategorized" : null),
+                  ) ?? "Not categorized"}
+                </div>
+              </div>
+              <div className="detail-meta-item">
+                <div className="label">Category Source</div>
+                <div className="value">{selected.category_assignment_mode ?? "Unknown"}</div>
+              </div>
+              <div className="detail-meta-item">
+                <div className="label">Category Confidence</div>
+                <div className="value">
+                  {selected.category_confidence === null
+                    ? "Unknown"
+                    : `${Math.round(selected.category_confidence * 100)}%`}
+                </div>
               </div>
               <div className="detail-meta-item">
                 <div className="label">Version</div>

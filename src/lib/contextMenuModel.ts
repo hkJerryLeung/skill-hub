@@ -70,6 +70,9 @@ export const buildSidebarAgentMenuItems = ({
     { id: "rescan", label: "Rescan Skills" },
     { id: "check-updates", label: "Check Updates" },
     { id: "update-all", label: "Update All" },
+    ...(agent === "Shared Library"
+      ? [{ id: "auto-categorize", label: "Auto Categorize" }]
+      : []),
   ];
 };
 

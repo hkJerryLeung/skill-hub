@@ -26,6 +26,7 @@ import { DetailPanel } from "./components/DetailPanel/DetailPanel";
 import { MarketView } from "./components/MarketView/MarketView";
 import { SettingsView } from "./components/SettingsView/SettingsView";
 import {
+  type DragSidebarTarget,
   resolveDragEndFallbackTarget,
   resolveDragLeaveSnapshot,
   resolveMigrationBatch,
@@ -56,6 +57,10 @@ import {
   type AppSettings,
 } from "./lib/appSettings";
 import { type RemoteMarketEntry, type RemoteMarketSource } from "./lib/marketTypes";
+import {
+  getSharedLibraryCategoryLabel,
+  SHARED_LIBRARY_CATEGORIES,
+} from "./lib/sharedLibraryCategories";
 
 interface Toast {
   message: string;
@@ -102,10 +107,22 @@ const getBoxStyle = (box: SelectionBox | null) => {
   } as React.CSSProperties;
 };
 
+const DEFAULT_SHARED_CATEGORY = "uncategorized";
+
+const isSharedCategoryTarget = (
+  value: string,
+): value is `shared-category:${string}` => value.startsWith("shared-category:");
+
+const getSharedCategoryFromTarget = (value: string | null): string | null => {
+  if (!value || !isSharedCategoryTarget(value)) return null;
+  return value.slice("shared-category:".length);
+};
+
 function App() {
   const [skills, setSkills] = useState<SkillInfo[]>([]);
   const [loading, setLoading] = useState(true);
   const [filter, setFilter] = useState<AgentFilter>("all");
+  const [sharedCategoryFilter, setSharedCategoryFilter] = useState<string | null>(null);
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState<StatusFilter>("all");
   const [settingsOpen, setSettingsOpen] = useState(false);
@@ -137,7 +154,7 @@ function App() {
   const initialSelection = useRef<Set<string>>(new Set());
 
   const draggedBatchRef = useRef<SkillInfo[]>([]);
-  const [dragOverTarget, setDragOverTarget] = useState<AgentFilter | null>(null);
+  const [dragOverTarget, setDragOverTarget] = useState<DragSidebarTarget | null>(null);
 
   const [skillContent, setSkillContent] = useState("");
   const [skillFiles, setSkillFiles] = useState<string[]>([]);
@@ -146,13 +163,14 @@ function App() {
   const [toast, setToast] = useState<Toast | null>(null);
   const [checkingAll, setCheckingAll] = useState(false);
   const [updatingAll, setUpdatingAll] = useState(false);
+  const [autoCategorizing, setAutoCategorizing] = useState(false);
   const [checkingSelected, setCheckingSelected] = useState(false);
   const [updatingSkillCanonicalPath, setUpdatingSkillCanonicalPath] = useState<string | null>(null);
   const [isDragging, setIsDragging] = useState(false);
   const [dragDebug, setDragDebug] = useState("idle");
   const [dragPreview, setDragPreview] = useState<{ x: number; y: number; count: number } | null>(null);
   const detailRequestIdRef = useRef(0);
-  const currentDropTargetRef = useRef<AgentFilter | null>(null);
+  const currentDropTargetRef = useRef<DragSidebarTarget | null>(null);
   const dropHandledRef = useRef(false);
   const migrationInFlightRef = useRef(false);
   const pointerDragRef = useRef<PointerDragState | null>(null);
@@ -281,6 +299,7 @@ function App() {
     closeContextMenu();
     closeDetail();
     setDiscoverView(null);
+    setSharedCategoryFilter(null);
     setSettingsOpen(true);
   };
 
@@ -289,6 +308,7 @@ function App() {
     setSettingsOpen(false);
     setDiscoverView(null);
     setFilter(nextFilter);
+    setSharedCategoryFilter(null);
     setStatusFilter((current) => {
       if (
         nextFilter === "Shared Library" &&
@@ -301,11 +321,21 @@ function App() {
     });
   };
 
+  const openSharedLibraryCategory = (categorySlug: string) => {
+    closeContextMenu();
+    setSettingsOpen(false);
+    setDiscoverView(null);
+    setFilter("Shared Library");
+    setSharedCategoryFilter(categorySlug);
+    setStatusFilter("all");
+  };
+
   const openDiscover = (view: DiscoverView) => {
     closeContextMenu();
     closeDetail();
     setSelectedIds(new Set());
     setSettingsOpen(false);
+    setSharedCategoryFilter(null);
     setDiscoverView(view);
   };
 
@@ -611,18 +641,18 @@ function App() {
     setDragOverTarget(null);
   };
 
-  const handleDragOver = (e: React.DragEvent, targetKey: AgentFilter) => {
+  const handleDragOver = (e: React.DragEvent, targetKey: string) => {
     if (targetKey === "all") return;
     e.preventDefault();
     e.dataTransfer.dropEffect = "move";
-    currentDropTargetRef.current = targetKey;
+    currentDropTargetRef.current = targetKey as DragSidebarTarget;
     setDragDebug(`sidebar:${targetKey}`);
     if (dragOverTarget !== targetKey) {
-      setDragOverTarget(targetKey);
+      setDragOverTarget(targetKey as DragSidebarTarget);
     }
   };
 
-  const handleDragLeave = (e: React.DragEvent, _targetKey: AgentFilter) => {
+  const handleDragLeave = (e: React.DragEvent, _targetKey: string) => {
     const nextTarget = e.relatedTarget;
     const nextSnapshot = resolveDragLeaveSnapshot(
       {
@@ -640,11 +670,40 @@ function App() {
     }
   };
 
+  const getDraggedSkillBatch = (allowSelectedFallback: boolean) =>
+    draggedBatchRef.current.length > 0
+      ? draggedBatchRef.current
+      : allowSelectedFallback
+        ? skills.filter((skill) => selectedIds.has(getSkillId(skill)))
+        : [];
+
   const migrateDraggedSkills = async (
-    targetKey: AgentFilter,
+    targetKey: DragSidebarTarget,
     options?: { allowSelectedFallback?: boolean },
   ) => {
     if (targetKey === "all" || migrationInFlightRef.current) return;
+
+    const sharedCategory = getSharedCategoryFromTarget(targetKey);
+    if (sharedCategory) {
+      const batch = getDraggedSkillBatch(!!options?.allowSelectedFallback);
+      const movableBatch = batch.filter(
+        (skill) =>
+          skill.agent !== "Shared Library" ||
+          (skill.category ?? DEFAULT_SHARED_CATEGORY) !== sharedCategory,
+      );
+
+      if (batch.length === 0) return;
+      if (movableBatch.length === 0) {
+        draggedBatchRef.current = [];
+        showToast("Selected skills are already in this category", "error");
+        return;
+      }
+
+      await executeSharedCategoryBatch(movableBatch, sharedCategory);
+      draggedBatchRef.current = [];
+      currentDropTargetRef.current = null;
+      return;
+    }
 
     const { batch, movableBatch } = resolveMigrationBatch({
       draggedBatch: draggedBatchRef.current,
@@ -663,7 +722,7 @@ function App() {
       return;
     }
 
-    await executeMigrationBatch(movableBatch, targetKey);
+    await executeMigrationBatch(movableBatch, targetKey as AgentFilter);
     draggedBatchRef.current = [];
     currentDropTargetRef.current = null;
   };
@@ -701,6 +760,56 @@ function App() {
     }
   };
 
+  const executeSharedCategoryBatch = async (
+    movableBatch: SkillInfo[],
+    categorySlug: string,
+  ) => {
+    if (movableBatch.length === 0) return;
+
+    const categoryLabel =
+      getSharedLibraryCategoryLabel(categorySlug) ?? categorySlug;
+    const shouldContinue = await confirmIfNeeded(
+      `Move ${movableBatch.length} skill${
+        movableBatch.length === 1 ? "" : "s"
+      } to ${categoryLabel}?`,
+      !!appSettings?.confirm_before_batch_migrate,
+    );
+    if (!shouldContinue) {
+      setDragOverTarget(null);
+      return;
+    }
+
+    migrationInFlightRef.current = true;
+    try {
+      let moved = 0;
+      for (const skill of movableBatch) {
+        if (skill.agent === "Shared Library") {
+          await invoke<string>("move_shared_skill_to_category", {
+            skillPath: skill.path,
+            categorySlug,
+          });
+        } else {
+          await invoke<string>("install_skill_to_shared_category", {
+            sourcePath: skill.path,
+            categorySlug,
+          });
+        }
+        moved += 1;
+      }
+
+      showToast(`Moved ${moved} skills to ${categoryLabel}`, "success");
+      setSelectedIds(new Set());
+      await Promise.all([
+        refreshSkills({ reloadSelected: !!selected }),
+        refreshMeta(),
+      ]);
+    } catch (error) {
+      showToast(String(error), "error");
+    } finally {
+      migrationInFlightRef.current = false;
+    }
+  };
+
   const handleDragEnd = () => {
     const fallbackTarget = resolveDragEndFallbackTarget({
       currentDropTarget: currentDropTargetRef.current,
@@ -722,12 +831,12 @@ function App() {
     dropHandledRef.current = false;
   };
 
-  const handleDrop = async (e: React.DragEvent, targetKey: AgentFilter) => {
+  const handleDrop = async (e: React.DragEvent, targetKey: string) => {
     e.preventDefault();
     dropHandledRef.current = true;
     setDragDebug(`drop:${targetKey}`);
     setDragOverTarget(null);
-    await migrateDraggedSkills(targetKey, { allowSelectedFallback: true });
+    await migrateDraggedSkills(targetKey as DragSidebarTarget, { allowSelectedFallback: true });
     dropHandledRef.current = false;
   };
 
@@ -1124,6 +1233,42 @@ function App() {
     }
   };
 
+  const handleAutoCategorize = async () => {
+    if (filter !== "Shared Library") return;
+    if (!appSettings?.categorization_enabled) {
+      showToast("Enable categorization in Settings first", "error");
+      return;
+    }
+
+    const selectedSharedSkills = filtered.filter(
+      (skill) => skill.agent === "Shared Library" && selectedIds.has(getSkillId(skill)),
+    );
+    const targetSkills =
+      selectedSharedSkills.length > 0
+        ? selectedSharedSkills
+        : filtered.filter((skill) => skill.agent === "Shared Library");
+    const skillPaths = Array.from(new Set(targetSkills.map((skill) => skill.path)));
+
+    if (skillPaths.length === 0) {
+      showToast("No shared skills available to categorize", "error");
+      return;
+    }
+
+    setAutoCategorizing(true);
+    try {
+      const result = await invoke<string>("auto_categorize_shared_skills", { skillPaths });
+      showToast(result, "success");
+      await Promise.all([
+        refreshSkills({ reloadSelected: !!selected }),
+        refreshMeta(),
+      ]);
+    } catch (error) {
+      showToast(String(error), "error");
+    } finally {
+      setAutoCategorizing(false);
+    }
+  };
+
   const handleRevealPath = async (path: string) => {
     try {
       await revealItemInDir(path);
@@ -1170,6 +1315,10 @@ function App() {
         }
         if (item.id === "update-all") {
           await handleUpdateAll();
+          return;
+        }
+        if (item.id === "auto-categorize") {
+          await handleAutoCategorize();
         }
       },
     }));
@@ -1319,7 +1468,25 @@ function App() {
     filter,
     search,
     statusFilter,
+    filter === "Shared Library" ? sharedCategoryFilter : null,
   );
+
+  const sharedCategoryItems = SHARED_LIBRARY_CATEGORIES.map((category) => ({
+    ...category,
+    count: new Set(
+      skills
+        .filter(
+          (skill) =>
+            skill.agent === "Shared Library" &&
+            (skill.category ?? DEFAULT_SHARED_CATEGORY) === category.slug,
+        )
+        .map((skill) => skill.canonical_path || skill.path),
+    ).size,
+  }));
+  const sharedCategoryLabel =
+    filter === "Shared Library"
+      ? getSharedLibraryCategoryLabel(sharedCategoryFilter)
+      : null;
 
   const countByAgent = (agent: string) =>
     agent === "all"
@@ -1423,6 +1590,9 @@ function App() {
       <Sidebar
         activeItem={activeSidebarItem}
         setFilter={openFilter}
+        activeSharedCategory={sharedCategoryFilter}
+        sharedCategories={sharedCategoryItems}
+        onOpenSharedCategory={openSharedLibraryCategory}
         onOpenDiscover={openDiscover}
         onOpenSettings={openSettings}
         onAgentContextMenu={handleSidebarAgentContextMenu}
@@ -1484,6 +1654,7 @@ function App() {
           <>
             <Topbar
               filter={filter}
+              sharedCategoryLabel={sharedCategoryLabel}
               search={search}
               setSearch={setSearch}
               statusFilter={statusFilter}
@@ -1493,10 +1664,13 @@ function App() {
               refreshLabel={topbarRefreshState.label}
               checkingAll={checkingAll}
               updatingAll={updatingAll}
+              autoCategorizing={autoCategorizing}
+              categorizationEnabled={appSettings?.categorization_enabled ?? false}
               onStatusFilterChange={handleStatusFilterChange}
               onRefresh={handleRescan}
               onCheckUpdates={runCheckAll}
               onUpdateAll={handleUpdateAll}
+              onAutoCategorize={handleAutoCategorize}
             />
 
             <SkillGrid

@@ -1,3 +1,4 @@
+mod categorizer;
 mod scanner;
 mod market;
 mod settings;
@@ -96,6 +97,14 @@ fn install_skill(source_path: String, target_agent: String) -> Result<String, St
 }
 
 #[tauri::command]
+fn install_skill_to_shared_category(
+    source_path: String,
+    category_slug: String,
+) -> Result<String, String> {
+    scanner::install_skill_to_shared_category(&source_path, &category_slug)
+}
+
+#[tauri::command]
 fn install_skill_from_github(
     github_url: String,
     target_agent: String,
@@ -120,6 +129,19 @@ fn uninstall_skill(skill_path: String) -> Result<String, String> {
 #[tauri::command]
 fn batch_migrate_skills(skills: Vec<SkillInfo>, target_agent: String) -> Result<String, String> {
     scanner::batch_migrate_skills(skills, &target_agent)
+}
+
+#[tauri::command]
+fn move_shared_skill_to_category(
+    skill_path: String,
+    category_slug: String,
+) -> Result<String, String> {
+    scanner::move_shared_skill_to_category(&skill_path, &category_slug)
+}
+
+#[tauri::command]
+fn auto_categorize_shared_skills(skill_paths: Vec<String>) -> Result<String, String> {
+    scanner::auto_categorize_shared_skills(skill_paths)
 }
 
 #[tauri::command]
@@ -162,9 +184,12 @@ pub fn run() {
             clear_update_cache,
             get_app_info,
             install_skill,
+            install_skill_to_shared_category,
             install_skill_from_github,
             uninstall_skill,
             batch_migrate_skills,
+            move_shared_skill_to_category,
+            auto_categorize_shared_skills,
             check_skill_updates,
             check_all_skill_updates,
             update_skill,

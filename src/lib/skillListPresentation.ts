@@ -95,6 +95,7 @@ export function buildSkillPresentation(
   skills: SkillInfo[],
   agentFilter: string,
   statusFilter: StatusFilter = "all",
+  sharedCategory: string | null = null,
 ): SkillPresentation {
   const groups = buildGroups(skills);
 
@@ -104,10 +105,16 @@ export function buildSkillPresentation(
         group.skills.some((skill) => skill.agent === "Shared Library"),
       )
       .map((group) => presentSharedLibraryGroup(group.skills));
-    const statusCounts = getFallbackStatusCounts(presentedSharedSkills);
+    const categoryScopedSkills =
+      sharedCategory === null
+        ? presentedSharedSkills
+        : presentedSharedSkills.filter(
+            (skill) => (skill.category ?? "uncategorized") === sharedCategory,
+          );
+    const statusCounts = getFallbackStatusCounts(categoryScopedSkills);
 
     return {
-      skills: filterSkillsByStatus(presentedSharedSkills, statusFilter),
+      skills: filterSkillsByStatus(categoryScopedSkills, statusFilter),
       statusCounts,
     };
   }

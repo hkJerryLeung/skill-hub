@@ -8,6 +8,11 @@ export interface AppSettings {
   theme_mode: ThemeMode;
   reduce_motion: boolean;
   auto_check_updates_on_launch: boolean;
+  categorization_enabled: boolean;
+  categorization_base_url: string;
+  categorization_model: string;
+  categorization_api_key: string;
+  categorization_confidence_threshold: number;
   startup_view: AgentFilter;
   startup_status_filter: StatusFilter;
   restore_last_session: boolean;
@@ -97,6 +102,11 @@ export const areSettingsEqual = (
   left.theme_mode === right.theme_mode &&
   left.reduce_motion === right.reduce_motion &&
   left.auto_check_updates_on_launch === right.auto_check_updates_on_launch &&
+  left.categorization_enabled === right.categorization_enabled &&
+  left.categorization_base_url === right.categorization_base_url &&
+  left.categorization_model === right.categorization_model &&
+  left.categorization_api_key === right.categorization_api_key &&
+  left.categorization_confidence_threshold === right.categorization_confidence_threshold &&
   left.startup_view === right.startup_view &&
   left.startup_status_filter === right.startup_status_filter &&
   left.restore_last_session === right.restore_last_session &&

@@ -4,11 +4,14 @@ import { buildBrowserSkillPresentation } from "../src/lib/skillBrowserPresentati
 const sharedFindSkills = {
   name: "find-skills",
   description: "Shared security skill",
-  path: "/Volumes/shared/find-skills",
-  canonical_path: "/Volumes/shared/find-skills",
+  path: "/Volumes/shared/security-systems/find-skills",
+  canonical_path: "/Volumes/shared/security-systems/find-skills",
   agent: "Shared Library",
   is_symlink: false,
-  category: null,
+  category: "security-systems",
+  category_assignment_mode: "auto",
+  category_confidence: 0.76,
+  category_classified_at: "2026-04-08T00:00:00Z",
   version: null,
   source: null,
   update_capability: "manual",
@@ -43,6 +46,7 @@ const sharedReact = {
   name: "vercel-react-best-practices",
   path: "/Volumes/shared/react-best-practices",
   canonical_path: "/Volumes/shared/react-best-practices",
+  category: "development-code-tools",
   version: "1.0.0",
   source: "https://github.com/vercel-labs/agent-skills/tree/main/skills/react-best-practices",
   update_capability: "github",
@@ -85,6 +89,7 @@ const presentedShared = buildBrowserSkillPresentation(
   "Shared Library",
   "",
   "all",
+  null,
 );
 
 assert.deepStrictEqual(
@@ -101,5 +106,27 @@ assert.deepStrictEqual(presentedShared.statusCounts, {
   local: 0,
   updates: 0,
 });
+
+const presentedSharedCategory = buildBrowserSkillPresentation(
+  [
+    sharedFindSkills,
+    claudeFindSkills,
+    codexFindSkills,
+    antigravityFindSkills,
+    sharedReact,
+    claudeReact,
+    codexReact,
+    antigravityReactLocal,
+  ],
+  "Shared Library",
+  "",
+  "all",
+  "security-systems",
+);
+
+assert.deepStrictEqual(
+  presentedSharedCategory.skills.map((skill) => skill.name),
+  ["find-skills"],
+);
 
 console.log("skillBrowserPresentation test passed");

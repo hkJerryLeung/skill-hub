@@ -109,6 +109,25 @@
   border: 1px dashed var(--accent-primary);
 }
 
+.sidebar-subtree {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  margin: 4px 0 0;
+  padding-left: 14px;
+}
+
+.sidebar-item-subtle {
+  padding-top: 7px;
+  padding-bottom: 7px;
+  font-size: var(--font-sm);
+  color: var(--text-secondary);
+}
+
+.sidebar-item-subtle .icon {
+  width: 12px;
+}
+
 .sidebar-footer {
   padding: 0 var(--sp-3);
   margin-top: auto;

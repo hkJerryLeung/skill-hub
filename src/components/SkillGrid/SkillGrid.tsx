@@ -1,6 +1,7 @@
 import './SkillGrid.css';
 import { SearchIcon } from '../Icons/Icons'; // We'll use SearchIcon for the empty state
 import { getSkillId } from '../../lib/skillIdentity';
+import { getSharedLibraryCategoryLabel } from '../../lib/sharedLibraryCategories';
 import {
   canTriggerInlineUpdate,
   getCardStatusLabel,
@@ -129,8 +130,12 @@ export function SkillGrid({
                 )}
                 <div className="skill-card-footer">
                   <div className="skill-card-footer-left">
-                    {skill.category && (
-                      <span className="skill-card-category">{skill.category}</span>
+                    {(skill.category ?? (skill.agent === "Shared Library" ? "uncategorized" : null)) && (
+                      <span className="skill-card-category">
+                        {getSharedLibraryCategoryLabel(
+                          skill.category ?? (skill.agent === "Shared Library" ? "uncategorized" : null),
+                        ) ?? skill.category}
+                      </span>
                     )}
                   </div>
                   <span className="skill-card-version">{getVersionLabel(skill)}</span>
