@@ -84,7 +84,7 @@ pub enum CategoryAssignmentMode {
 ```rust
 #[test]
 fn category_sidecar_invalid_slug_falls_back_to_none() {
-    let metadata = parse_skill_hub_metadata(r#"{"category_assignment":{"mode":"auto","slug":"wrong"}}"#);
+    let metadata = parse_skill_gate_metadata(r#"{"category_assignment":{"mode":"auto","slug":"wrong"}}"#);
     assert!(metadata.category_assignment.is_none());
 }
 ```

@@ -2,7 +2,7 @@
 
 ## Goal
 
-Add a first-class app settings experience to Skill Hub, exposed from the lower-left sidebar, with a complete desktop-style settings page and persistent configuration. The most important requirement is making the Shared Library folder configurable instead of fixed to `~/SharedSkills`.
+Add a first-class app settings experience to Skill Gate, exposed from the lower-left sidebar, with a complete desktop-style settings page and persistent configuration. The most important requirement is making the Shared Library folder configurable instead of fixed to `~/SharedSkills`.
 
 ## Current Context
 

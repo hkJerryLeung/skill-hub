@@ -2,7 +2,7 @@
 
 ## Goal
 
-Restore right-click actions for both the left sidebar items and the right-side skill cards using an app-native floating context menu that matches the current Skill Hub visual language.
+Restore right-click actions for both the left sidebar items and the right-side skill cards using an app-native floating context menu that matches the current Skill Gate visual language.
 
 ## Approved Decisions
 

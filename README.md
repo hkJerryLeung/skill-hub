@@ -1,4 +1,4 @@
-# Skill Hub
+# Skill Gate
 
 <p>
   <strong>A local-first desktop application for managing AI Agent skills, featuring a sleek, modular design and robust batch management capabilities.</strong>
@@ -6,7 +6,7 @@
 
 ## Overview
 
-Skill Hub is a high-performance desktop application designed to streamline the management of AI agent skills. Built with modern web technologies, it allows you to easily categorize, drag-and-drop, and batch-migrate your skills across different AI agent environments such as Claude Code, Antigravity, and Codex. 
+Skill Gate is a high-performance desktop application designed to streamline the management of AI agent skills. Built with modern web technologies, it allows you to easily categorize, drag-and-drop, and batch-migrate your skills across different AI agent environments such as Claude Code, Antigravity, and Codex. 
 
 The user interface adheres to the custom WWT Design Guidelines, featuring a premium dark-mode aesthetic with brand-red accents and a typography-driven UI element system.
 
@@ -29,7 +29,7 @@ The user interface adheres to the custom WWT Design Guidelines, featuring a prem
 - Non-GitHub URLs support best-effort version hints only and remain manual-update sources.
 - Values such as `community`, `self`, `personal`, or missing `source:` are treated as manual-only.
 
-Before any automatic update, Skill Hub backs up overwritten files to the app data directory and preserves local files that are not present upstream.
+Before any automatic update, Skill Gate backs up overwritten files to the app data directory and preserves local files that are not present upstream.
 
 ## Tech Stack
 
@@ -42,8 +42,8 @@ Before any automatic update, Skill Hub backs up overwritten files to the app dat
 
 1. **Clone the repository**
    ```bash
-   git clone https://github.com/yourusername/skill-hub.git
-   cd skill-hub
+   git clone https://github.com/yourusername/skill-gate.git
+   cd skill-gate
    ```
 
 2. **Install dependencies**

@@ -8,7 +8,7 @@ use std::process::Command;
 use std::time::{SystemTime, UNIX_EPOCH};
 use walkdir::WalkDir;
 
-const REQUEST_USER_AGENT: &str = "skill-hub/0.1";
+const REQUEST_USER_AGENT: &str = "skill-gate/0.1";
 
 #[derive(Debug, Clone, Serialize, PartialEq, Eq)]
 pub struct RemoteMarketEntry {
@@ -213,7 +213,9 @@ fn parse_github_install_request(github_url: &str) -> Result<GitHubInstallRequest
     let without_suffix = trimmed.trim_end_matches(".git");
     let prefix = "https://github.com/";
     if !without_suffix.starts_with(prefix) {
-        return Err(String::from("GitHub URL must start with https://github.com/"));
+        return Err(String::from(
+            "GitHub URL must start with https://github.com/",
+        ));
     }
 
     let path = &without_suffix[prefix.len()..];
@@ -248,13 +250,23 @@ fn download_and_extract_repository(
     request: &GitHubInstallRequest,
     temp_root: &Path,
 ) -> Result<DownloadedRepository, String> {
-    fs::create_dir_all(temp_root)
-        .map_err(|error| format!("Failed to create temp dir '{}': {}", temp_root.display(), error))?;
+    fs::create_dir_all(temp_root).map_err(|error| {
+        format!(
+            "Failed to create temp dir '{}': {}",
+            temp_root.display(),
+            error
+        )
+    })?;
 
     let archive_path = temp_root.join("repo.tar.gz");
     let extract_root = temp_root.join("extract");
-    fs::create_dir_all(&extract_root)
-        .map_err(|error| format!("Failed to create extract dir '{}': {}", extract_root.display(), error))?;
+    fs::create_dir_all(&extract_root).map_err(|error| {
+        format!(
+            "Failed to create extract dir '{}': {}",
+            extract_root.display(),
+            error
+        )
+    })?;
 
     let client = Client::new();
     let candidate_branches = request
@@ -283,10 +295,20 @@ fn download_and_extract_repository(
         let bytes = response
             .bytes()
             .map_err(|error| format!("Failed to read archive '{}': {}", archive_url, error))?;
-        let mut file = fs::File::create(&archive_path)
-            .map_err(|error| format!("Failed to create archive '{}': {}", archive_path.display(), error))?;
-        file.write_all(&bytes)
-            .map_err(|error| format!("Failed to write archive '{}': {}", archive_path.display(), error))?;
+        let mut file = fs::File::create(&archive_path).map_err(|error| {
+            format!(
+                "Failed to create archive '{}': {}",
+                archive_path.display(),
+                error
+            )
+        })?;
+        file.write_all(&bytes).map_err(|error| {
+            format!(
+                "Failed to write archive '{}': {}",
+                archive_path.display(),
+                error
+            )
+        })?;
         downloaded_branch = Some(branch.clone());
         break;
     }
@@ -307,11 +329,19 @@ fn download_and_extract_repository(
     }
 
     let repo_root = fs::read_dir(&extract_root)
-        .map_err(|error| format!("Failed to inspect extract dir '{}': {}", extract_root.display(), error))?
+        .map_err(|error| {
+            format!(
+                "Failed to inspect extract dir '{}': {}",
+                extract_root.display(),
+                error
+            )
+        })?
         .filter_map(Result::ok)
         .map(|entry| entry.path())
         .find(|path| path.is_dir())
-        .ok_or_else(|| String::from("Repository archive did not contain an extracted root directory"))?;
+        .ok_or_else(|| {
+            String::from("Repository archive did not contain an extracted root directory")
+        })?;
 
     Ok(DownloadedRepository {
         root: repo_root,
@@ -349,7 +379,12 @@ struct MarketDetail {
 
 fn parse_market_detail_page(html: &str) -> MarketDetail {
     let install_command = extract_between(html, "<code class=\"truncate\">", "</code>")
-        .map(|value| strip_html(&value).trim_start_matches('$').trim().to_string())
+        .map(|value| {
+            strip_html(&value)
+                .trim_start_matches('$')
+                .trim()
+                .to_string()
+        })
         .filter(|value| !value.is_empty());
 
     let summary = extract_summary_block(html)
@@ -443,7 +478,11 @@ fn upsert_install_metadata(
         .map_err(|error| format!("Failed to read '{}': {}", skill_md_path.display(), error))?;
 
     let (mut frontmatter, body) = split_frontmatter(&content);
-    upsert_frontmatter_key(&mut frontmatter, "source", &quote_frontmatter_value(source_url));
+    upsert_frontmatter_key(
+        &mut frontmatter,
+        "source",
+        &quote_frontmatter_value(source_url),
+    );
     if let Some(value) = market_source.filter(|value| !value.trim().is_empty()) {
         upsert_frontmatter_key(
             &mut frontmatter,
@@ -487,7 +526,10 @@ fn split_frontmatter(content: &str) -> (Vec<String>, String) {
 }
 
 fn upsert_frontmatter_key(lines: &mut Vec<String>, key: &str, value: &str) {
-    if let Some(line) = lines.iter_mut().find(|line| line.trim_start().starts_with(&format!("{}:", key))) {
+    if let Some(line) = lines
+        .iter_mut()
+        .find(|line| line.trim_start().starts_with(&format!("{}:", key)))
+    {
         *line = format!("{}: {}", key, value);
         return;
     }
@@ -588,7 +630,13 @@ fn read_skill_name(path: &Path) -> Option<String> {
         }
         let (key, value) = trimmed.split_once(':')?;
         if key.trim() == "name" {
-            return Some(value.trim().trim_matches('"').trim_matches('\'').to_string());
+            return Some(
+                value
+                    .trim()
+                    .trim_matches('"')
+                    .trim_matches('\'')
+                    .to_string(),
+            );
         }
     }
 
@@ -597,7 +645,7 @@ fn read_skill_name(path: &Path) -> Option<String> {
 
 fn temp_dir(label: &str) -> PathBuf {
     std::env::temp_dir().join(format!(
-        "skill-hub-market-{}-{}",
+        "skill-gate-market-{}-{}",
         label,
         SystemTime::now()
             .duration_since(UNIX_EPOCH)
@@ -694,7 +742,9 @@ mod tests {
         .expect("should write source metadata");
 
         let content = fs::read_to_string(skill_dir.join("SKILL.md")).unwrap();
-        assert!(content.contains("source: \"https://github.com/example/skills/tree/main/skills/demo\""));
+        assert!(
+            content.contains("source: \"https://github.com/example/skills/tree/main/skills/demo\"")
+        );
         assert!(content.contains("source_market: \"skills.sh\""));
         assert!(content.contains("source_market_url: \"https://skills.sh/example/skills/demo\""));
         let _ = fs::remove_dir_all(root);

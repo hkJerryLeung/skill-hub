@@ -30,7 +30,9 @@ pub fn parse_chat_completion_response(response: &str) -> Result<ClassificationRe
         .and_then(|choices| choices.first())
         .and_then(|choice| choice.get("message"))
         .and_then(|message| message.get("content"))
-        .ok_or_else(|| String::from("Chat completion response missing choices[0].message.content"))?;
+        .ok_or_else(|| {
+            String::from("Chat completion response missing choices[0].message.content")
+        })?;
 
     let text = if let Some(text) = content.as_str() {
         text.to_string()
@@ -40,7 +42,9 @@ pub fn parse_chat_completion_response(response: &str) -> Result<ClassificationRe
             .filter_map(|part| part.get("text").and_then(Value::as_str))
             .collect::<String>()
     } else {
-        return Err(String::from("Unsupported chat completion message content shape"));
+        return Err(String::from(
+            "Unsupported chat completion message content shape",
+        ));
     };
 
     let parsed: RawClassificationResult = serde_json::from_str(&text)
@@ -90,7 +94,9 @@ pub fn categorize_skill_directory(
         });
     }
 
-    if settings.categorization_base_url.trim().is_empty() || settings.categorization_model.trim().is_empty() {
+    if settings.categorization_base_url.trim().is_empty()
+        || settings.categorization_model.trim().is_empty()
+    {
         return Ok(ClassificationResult {
             category_slug: String::from("uncategorized"),
             confidence: None,

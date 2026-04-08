@@ -99,7 +99,7 @@ export function Sidebar({
       <div className="sidebar-body">
         <div className="sidebar-header">
           <div className="logo">
-            skill hub<span className="logo-dot">.</span>
+            skill gate<span className="logo-dot">.</span>
           </div>
         </div>
 

@@ -2,6 +2,9 @@ use serde::{Deserialize, Serialize};
 use std::fs;
 use std::path::{Path, PathBuf};
 
+const APP_CONFIG_DIR_NAME: &str = "skill-gate";
+const LEGACY_APP_CONFIG_DIR_NAME: &str = "skill-hub";
+
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, Default)]
 pub struct AppInfo {
     pub product_name: String,
@@ -112,9 +115,16 @@ fn default_shared_library_path() -> String {
 }
 
 fn config_root() -> Result<PathBuf, String> {
-    dirs::config_dir()
-        .map(|path| path.join("skill-hub"))
-        .ok_or_else(|| String::from("Failed to resolve config directory"))
+    let base =
+        dirs::config_dir().ok_or_else(|| String::from("Failed to resolve config directory"))?;
+    let current = base.join(APP_CONFIG_DIR_NAME);
+    let legacy = base.join(LEGACY_APP_CONFIG_DIR_NAME);
+
+    if current.exists() || !legacy.exists() {
+        Ok(current)
+    } else {
+        Ok(legacy)
+    }
 }
 
 fn ensure_parent_dir(path: &Path) -> Result<(), String> {
@@ -122,8 +132,13 @@ fn ensure_parent_dir(path: &Path) -> Result<(), String> {
         return Ok(());
     };
 
-    fs::create_dir_all(parent)
-        .map_err(|error| format!("Failed to create config directory '{}': {}", parent.display(), error))
+    fs::create_dir_all(parent).map_err(|error| {
+        format!(
+            "Failed to create config directory '{}': {}",
+            parent.display(),
+            error
+        )
+    })
 }
 
 fn expand_home_prefix(value: &str) -> Result<PathBuf, String> {
@@ -132,7 +147,8 @@ fn expand_home_prefix(value: &str) -> Result<PathBuf, String> {
     }
 
     if let Some(rest) = value.strip_prefix("~/") {
-        let home = dirs::home_dir().ok_or_else(|| String::from("Failed to resolve home directory"))?;
+        let home =
+            dirs::home_dir().ok_or_else(|| String::from("Failed to resolve home directory"))?;
         return Ok(home.join(rest));
     }
 
@@ -147,7 +163,9 @@ pub(crate) fn normalize_shared_library_path(raw: &str) -> Result<String, String>
 
     let expanded = expand_home_prefix(trimmed)?;
     if !expanded.is_absolute() {
-        return Err(String::from("Shared Library folder must be an absolute path"));
+        return Err(String::from(
+            "Shared Library folder must be an absolute path",
+        ));
     }
 
     Ok(expanded.to_string_lossy().to_string())
@@ -182,9 +200,13 @@ pub(crate) fn load_settings() -> Result<AppSettings, String> {
     load_settings_from_path(&settings_path()?)
 }
 
-pub(crate) fn save_settings_to_path(path: &Path, settings: &AppSettings) -> Result<AppSettings, String> {
+pub(crate) fn save_settings_to_path(
+    path: &Path,
+    settings: &AppSettings,
+) -> Result<AppSettings, String> {
     let mut normalized = settings.clone();
-    normalized.shared_library_path = normalize_shared_library_path(&normalized.shared_library_path)?;
+    normalized.shared_library_path =
+        normalize_shared_library_path(&normalized.shared_library_path)?;
 
     ensure_parent_dir(path)?;
     let content = serde_json::to_string_pretty(&normalized)
@@ -200,16 +222,28 @@ pub(crate) fn save_settings(settings: &AppSettings) -> Result<AppSettings, Strin
     save_settings_to_path(&settings_path()?, settings)
 }
 
-pub(crate) fn load_browser_session_state_from_path(path: &Path) -> Result<BrowserSessionState, String> {
+pub(crate) fn load_browser_session_state_from_path(
+    path: &Path,
+) -> Result<BrowserSessionState, String> {
     if !path.exists() {
         return Ok(BrowserSessionState::default());
     }
 
-    let content = fs::read_to_string(path)
-        .map_err(|error| format!("Failed to read session state '{}': {}", path.display(), error))?;
+    let content = fs::read_to_string(path).map_err(|error| {
+        format!(
+            "Failed to read session state '{}': {}",
+            path.display(),
+            error
+        )
+    })?;
 
-    serde_json::from_str(&content)
-        .map_err(|error| format!("Failed to parse session state '{}': {}", path.display(), error))
+    serde_json::from_str(&content).map_err(|error| {
+        format!(
+            "Failed to parse session state '{}': {}",
+            path.display(),
+            error
+        )
+    })
 }
 
 pub(crate) fn load_browser_session_state() -> Result<BrowserSessionState, String> {
@@ -224,8 +258,13 @@ pub(crate) fn save_browser_session_state_to_path(
     let content = serde_json::to_string_pretty(state)
         .map_err(|error| format!("Failed to serialize session state: {}", error))?;
 
-    fs::write(path, content)
-        .map_err(|error| format!("Failed to write session state '{}': {}", path.display(), error))
+    fs::write(path, content).map_err(|error| {
+        format!(
+            "Failed to write session state '{}': {}",
+            path.display(),
+            error
+        )
+    })
 }
 
 pub(crate) fn save_browser_session_state(state: &BrowserSessionState) -> Result<(), String> {
@@ -247,7 +286,7 @@ mod tests {
             .duration_since(UNIX_EPOCH)
             .unwrap()
             .as_nanos();
-        let dir = std::env::temp_dir().join(format!("skill-hub-settings-{}-{}", label, unique));
+        let dir = std::env::temp_dir().join(format!("skill-gate-settings-{}-{}", label, unique));
         fs::create_dir_all(&dir).unwrap();
         dir
     }

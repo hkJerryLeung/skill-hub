@@ -2,7 +2,7 @@
 
 ## Goal
 
-Add first-class categories inside `Shared Library` so Skill Hub can:
+Add first-class categories inside `Shared Library` so Skill Gate can:
 
 - automatically assign exactly one primary category to a skill by reading its content with an LLM
 - physically store the skill inside that category folder
@@ -57,18 +57,18 @@ SharedSkills/
   development-code-tools/
     skill-a/
       SKILL.md
-      .skill-hub.json
+      .skill-gate.json
   data-analysis/
     skill-b/
       SKILL.md
-      .skill-hub.json
+      .skill-gate.json
   uncategorized/
     skill-c/
 ```
 
 ### Sidecar Metadata
 
-Add an optional `.skill-hub.json` file inside each shared skill directory. This file does not define the live category. It only records assignment metadata and protects manual moves from later batch runs.
+Add an optional `.skill-gate.json` file inside each shared skill directory. This file does not define the live category. It only records assignment metadata and protects manual moves from later batch runs.
 
 Suggested shape:
 
@@ -151,7 +151,7 @@ When the target is `Shared Library`:
 2. If categorization is enabled, ask the classifier for one taxonomy slug.
 3. If categorization is disabled or fails, use `uncategorized`.
 4. Copy or move the skill into `SharedSkills/<slug>/<skill-name>`.
-5. Write `.skill-hub.json` with `mode = auto`.
+5. Write `.skill-gate.json` with `mode = auto`.
 6. Re-link matching agent installs using the existing shared-library sync flow.
 
 This replaces the current `infer_skill_category` behavior for new Shared Library installs.
@@ -163,7 +163,7 @@ Manual reassignment changes the real path, not just metadata.
 When the user drags a shared skill onto another category:
 
 1. Move the folder from `SharedSkills/<old>/<skill-name>` to `SharedSkills/<new>/<skill-name>`.
-2. Update `.skill-hub.json` to `mode = manual` and the new slug.
+2. Update `.skill-gate.json` to `mode = manual` and the new slug.
 3. Re-run shared-library link sync for that skill name so agent symlinks point to the new location.
 
 Dragging onto the root `Shared Library` item moves the skill into `SharedSkills/uncategorized/<skill-name>`.
@@ -241,14 +241,14 @@ Add Tauri commands for the new behaviors:
 - `move_shared_skill_to_category(skill_path, category_slug)`
 - `auto_categorize_shared_skills(skill_paths)`
 
-`scan_skills` remains the main read path, but it now also reads `.skill-hub.json` when present.
+`scan_skills` remains the main read path, but it now also reads `.skill-gate.json` when present.
 
 ## Error Handling
 
 - If the model response is invalid, fall back to `uncategorized`.
 - If the destination folder already exists, fail that skill and keep the current location unchanged.
 - If relinking agent symlinks fails after a move, surface the error and leave the skill in its new category rather than trying to roll back partially.
-- If the user has manually moved a folder in Finder, scan should trust the path-derived category even if `.skill-hub.json` is stale.
+- If the user has manually moved a folder in Finder, scan should trust the path-derived category even if `.skill-gate.json` is stale.
 
 ## Testing
 

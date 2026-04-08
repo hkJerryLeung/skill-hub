@@ -2,7 +2,7 @@
 
 ## Goal
 
-Add skill version visibility, update prompts, and one-click bulk update support to Skill Hub without turning it into a full package manager.
+Add skill version visibility, update prompts, and one-click bulk update support to Skill Gate without turning it into a full package manager.
 
 ## Scope
 
@@ -86,11 +86,11 @@ For GitHub updates:
 
 Backup location:
 
-- `~/Library/Application Support/skill-hub/backups/<timestamp>/<skill-name>/`
+- `~/Library/Application Support/skill-gate/backups/<timestamp>/<skill-name>/`
 
 Cache location:
 
-- `~/Library/Application Support/skill-hub/update-cache.json`
+- `~/Library/Application Support/skill-gate/update-cache.json`
 
 ## UI
 

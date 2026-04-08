@@ -1,12 +1,12 @@
 mod categorizer;
-mod scanner;
 mod market;
+mod scanner;
 mod settings;
 mod update_manager;
 
+use market::RemoteMarketEntry;
 use scanner::{AgentTarget, SkillInfo};
 use settings::{AppInfo, AppSettings, BrowserSessionState};
-use market::RemoteMarketEntry;
 
 #[tauri::command]
 fn scan_skills(app: tauri::AppHandle) -> Vec<SkillInfo> {
@@ -78,7 +78,7 @@ fn clear_update_cache(app: tauri::AppHandle) -> Result<String, String> {
 #[tauri::command]
 fn get_app_info(app: tauri::AppHandle) -> Result<AppInfo, String> {
     Ok(AppInfo {
-        product_name: String::from("Skill Hub"),
+        product_name: String::from("Skill Gate"),
         version: env!("CARGO_PKG_VERSION").to_string(),
         settings_path: settings::settings_path()?.to_string_lossy().to_string(),
         session_path: settings::session_path()?.to_string_lossy().to_string(),

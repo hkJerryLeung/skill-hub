@@ -2,7 +2,7 @@
 
 ## Goal
 
-Add a second sidebar section beneath the local agent library so Skill Hub can browse and install remote skills from `huggingface`, `skills.sh`, `skillsmp.com`, and direct GitHub links.
+Add a second sidebar section beneath the local agent library so Skill Gate can browse and install remote skills from `huggingface`, `skills.sh`, `skillsmp.com`, and direct GitHub links.
 
 ## Current Context
 

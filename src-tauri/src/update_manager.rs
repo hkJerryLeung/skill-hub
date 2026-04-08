@@ -9,6 +9,8 @@ use std::time::{SystemTime, UNIX_EPOCH};
 use tauri::{AppHandle, Manager};
 use walkdir::WalkDir;
 
+const LEGACY_APP_DATA_DIR_NAME: &str = "com.kapoleung.skill-hub";
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 struct GitHubSource {
     owner: String,
@@ -24,7 +26,10 @@ fn parse_github_source(source: &str) -> GitHubSource {
         .or_else(|| trimmed.strip_prefix("http://github.com/"))
         .unwrap_or(trimmed);
 
-    let parts: Vec<&str> = suffix.split('/').filter(|segment| !segment.is_empty()).collect();
+    let parts: Vec<&str> = suffix
+        .split('/')
+        .filter(|segment| !segment.is_empty())
+        .collect();
     let owner = parts.first().copied().unwrap_or_default().to_string();
     let repo = parts.get(1).copied().unwrap_or_default().to_string();
 
@@ -132,11 +137,21 @@ pub(crate) fn load_update_cache_from_path(path: &Path) -> Result<UpdateCache, St
         return Ok(UpdateCache::default());
     }
 
-    let content = fs::read_to_string(path)
-        .map_err(|error| format!("Failed to read update cache '{}': {}", path.display(), error))?;
+    let content = fs::read_to_string(path).map_err(|error| {
+        format!(
+            "Failed to read update cache '{}': {}",
+            path.display(),
+            error
+        )
+    })?;
 
-    serde_json::from_str(&content)
-        .map_err(|error| format!("Failed to parse update cache '{}': {}", path.display(), error))
+    serde_json::from_str(&content).map_err(|error| {
+        format!(
+            "Failed to parse update cache '{}': {}",
+            path.display(),
+            error
+        )
+    })
 }
 
 pub(crate) fn save_update_cache_to_path(path: &Path, cache: &UpdateCache) -> Result<(), String> {
@@ -153,8 +168,13 @@ pub(crate) fn save_update_cache_to_path(path: &Path, cache: &UpdateCache) -> Res
     let content = serde_json::to_string_pretty(cache)
         .map_err(|error| format!("Failed to serialize update cache: {}", error))?;
 
-    fs::write(path, content)
-        .map_err(|error| format!("Failed to write update cache '{}': {}", path.display(), error))
+    fs::write(path, content).map_err(|error| {
+        format!(
+            "Failed to write update cache '{}': {}",
+            path.display(),
+            error
+        )
+    })
 }
 
 pub(crate) fn apply_cached_update_state(skills: &mut [SkillInfo], cache: &UpdateCache) {
@@ -186,7 +206,8 @@ fn copy_path_recursive(source: &Path, destination: &Path) -> Result<(), String> 
                 error
             )
         })? {
-            let entry = entry.map_err(|error| format!("Failed to read directory entry: {}", error))?;
+            let entry =
+                entry.map_err(|error| format!("Failed to read directory entry: {}", error))?;
             copy_path_recursive(&entry.path(), &destination.join(entry.file_name()))?;
         }
 
@@ -246,10 +267,20 @@ fn apply_remote_snapshot_to_local_skill(
     backup_root: &Path,
     _skill_name: &str,
 ) -> Result<(), String> {
-    fs::create_dir_all(local_dir)
-        .map_err(|error| format!("Failed to create local skill dir '{}': {}", local_dir.display(), error))?;
-    fs::create_dir_all(backup_root)
-        .map_err(|error| format!("Failed to create backup dir '{}': {}", backup_root.display(), error))?;
+    fs::create_dir_all(local_dir).map_err(|error| {
+        format!(
+            "Failed to create local skill dir '{}': {}",
+            local_dir.display(),
+            error
+        )
+    })?;
+    fs::create_dir_all(backup_root).map_err(|error| {
+        format!(
+            "Failed to create backup dir '{}': {}",
+            backup_root.display(),
+            error
+        )
+    })?;
 
     for entry in WalkDir::new(remote_snapshot_dir).min_depth(1) {
         let entry = entry.map_err(|error| format!("Failed to walk remote snapshot: {}", error))?;
@@ -350,7 +381,7 @@ fn now_timestamp() -> String {
 
 fn github_client() -> Result<Client, String> {
     Client::builder()
-        .user_agent("skill-hub/0.1.0")
+        .user_agent("skill-gate/0.1.0")
         .build()
         .map_err(|error| format!("Failed to create HTTP client: {}", error))
 }
@@ -364,18 +395,29 @@ fn validate_github_source(source: &str) -> Result<GitHubSource, String> {
     Ok(parsed)
 }
 
-pub(crate) fn cache_path_for_app(app: &AppHandle) -> Result<PathBuf, String> {
-    app.path()
+fn resolved_app_data_dir(app: &AppHandle) -> Result<PathBuf, String> {
+    let current = app
+        .path()
         .app_data_dir()
-        .map(|path: PathBuf| path.join("update-cache.json"))
-        .map_err(|error| format!("Failed to resolve app data directory: {}", error))
+        .map_err(|error| format!("Failed to resolve app data directory: {}", error))?;
+    let Some(parent) = current.parent() else {
+        return Ok(current);
+    };
+
+    let legacy = parent.join(LEGACY_APP_DATA_DIR_NAME);
+    if current.exists() || !legacy.exists() {
+        Ok(current)
+    } else {
+        Ok(legacy)
+    }
+}
+
+pub(crate) fn cache_path_for_app(app: &AppHandle) -> Result<PathBuf, String> {
+    Ok(resolved_app_data_dir(app)?.join("update-cache.json"))
 }
 
 pub(crate) fn backups_root_for_app(app: &AppHandle) -> Result<PathBuf, String> {
-    app.path()
-        .app_data_dir()
-        .map(|path: PathBuf| path.join("backups"))
-        .map_err(|error| format!("Failed to resolve backups directory: {}", error))
+    Ok(resolved_app_data_dir(app)?.join("backups"))
 }
 
 pub(crate) fn load_update_cache(app: &AppHandle) -> Result<UpdateCache, String> {
@@ -394,8 +436,13 @@ pub(crate) fn clear_update_cache(app: &AppHandle) -> Result<String, String> {
         return Ok(String::from("Update cache is already empty"));
     }
 
-    fs::remove_file(&cache_path)
-        .map_err(|error| format!("Failed to remove update cache '{}': {}", cache_path.display(), error))?;
+    fs::remove_file(&cache_path).map_err(|error| {
+        format!(
+            "Failed to remove update cache '{}': {}",
+            cache_path.display(),
+            error
+        )
+    })?;
 
     Ok(String::from("Cleared cached update status"))
 }
@@ -545,7 +592,10 @@ fn list_github_files_recursive(
                     };
 
                     let download_url = entry.download_url.ok_or_else(|| {
-                        format!("GitHub entry '{}' does not expose a download URL", entry.path)
+                        format!(
+                            "GitHub entry '{}' does not expose a download URL",
+                            entry.path
+                        )
                     })?;
 
                     files.push(RemoteFileDescriptor {
@@ -634,7 +684,11 @@ fn fetch_github_snapshot(
 }
 
 fn manual_or_external_entry(skill: &SkillInfo, remote_version: Option<String>) -> UpdateCacheEntry {
-    let update_status = match (skill.update_capability.clone(), skill.version.as_deref(), remote_version.as_deref()) {
+    let update_status = match (
+        skill.update_capability.clone(),
+        skill.version.as_deref(),
+        remote_version.as_deref(),
+    ) {
         (UpdateCapability::Manual, Some(_), _) => UpdateStatus::ManualOnly,
         (UpdateCapability::Manual, None, _) => UpdateStatus::Unversioned,
         (_, _, Some(remote)) if skill.version.as_deref() == Some(remote) => UpdateStatus::UpToDate,
@@ -688,11 +742,17 @@ fn check_skill_against_source(
             let content = client
                 .get(source)
                 .send()
-                .map_err(|error| format!("Failed to fetch external source '{}': {}", source, error))?
+                .map_err(|error| {
+                    format!("Failed to fetch external source '{}': {}", source, error)
+                })?
                 .error_for_status()
-                .map_err(|error| format!("External source request failed for '{}': {}", source, error))?
+                .map_err(|error| {
+                    format!("External source request failed for '{}': {}", source, error)
+                })?
                 .text()
-                .map_err(|error| format!("Failed to read external source '{}': {}", source, error))?;
+                .map_err(|error| {
+                    format!("Failed to read external source '{}': {}", source, error)
+                })?;
             Ok(manual_or_external_entry(
                 skill,
                 extract_frontmatter_value(&content, "version"),
@@ -746,7 +806,10 @@ fn write_backup_metadata(
     })
 }
 
-fn write_remote_snapshot_to_dir(snapshot: &RemoteSkillSnapshot, directory: &Path) -> Result<(), String> {
+fn write_remote_snapshot_to_dir(
+    snapshot: &RemoteSkillSnapshot,
+    directory: &Path,
+) -> Result<(), String> {
     if directory.exists() {
         fs::remove_dir_all(directory).map_err(|error| {
             format!(
@@ -805,7 +868,7 @@ fn update_github_backed_skill(
     let backups_root = backups_root_for_app(app)?;
     let backup_dir = backup_directory_for_skill(&backups_root, &local_skill_directory_name(skill));
     let temp_dir = std::env::temp_dir().join(format!(
-        "skill-hub-remote-snapshot-{}-{}",
+        "skill-gate-remote-snapshot-{}-{}",
         local_skill_directory_name(skill),
         SystemTime::now()
             .duration_since(UNIX_EPOCH)
@@ -879,7 +942,9 @@ pub(crate) fn check_all_skill_updates(app: &AppHandle) -> Result<String, String>
                 match entry.update_status {
                     UpdateStatus::UpdateAvailable => summary.update_available += 1,
                     UpdateStatus::UpToDate => summary.up_to_date += 1,
-                    UpdateStatus::ManualOnly | UpdateStatus::Unversioned => summary.manual_only += 1,
+                    UpdateStatus::ManualOnly | UpdateStatus::Unversioned => {
+                        summary.manual_only += 1
+                    }
                     UpdateStatus::Unknown => {}
                     UpdateStatus::Error => summary.errors += 1,
                 }
@@ -909,7 +974,10 @@ pub(crate) fn check_all_skill_updates(app: &AppHandle) -> Result<String, String>
 pub(crate) fn update_single_skill(app: &AppHandle, skill_path: &str) -> Result<String, String> {
     let skill = find_skill_by_path(skill_path)?;
     if skill.update_capability != UpdateCapability::GitHub {
-        return Err(format!("'{}' does not support automatic updates", skill.name));
+        return Err(format!(
+            "'{}' does not support automatic updates",
+            skill.name
+        ));
     }
 
     let client = github_client()?;
@@ -947,7 +1015,9 @@ pub(crate) fn update_all_github_skills(app: &AppHandle) -> Result<String, String
 
         if check_entry.update_status != UpdateStatus::UpdateAvailable {
             summary.skipped += 1;
-            cache.entries.insert(skill.canonical_path.clone(), check_entry);
+            cache
+                .entries
+                .insert(skill.canonical_path.clone(), check_entry);
             continue;
         }
 
@@ -969,10 +1039,7 @@ pub(crate) fn update_all_github_skills(app: &AppHandle) -> Result<String, String
 
     Ok(format!(
         "Updated {} skills, skipped {}, manual-only {}, failed {}",
-        summary.updated,
-        summary.skipped,
-        summary.manual_only,
-        summary.failed
+        summary.updated, summary.skipped, summary.manual_only, summary.failed
     ))
 }
 
@@ -988,7 +1055,7 @@ mod tests {
             .duration_since(UNIX_EPOCH)
             .unwrap()
             .as_nanos();
-        let path = std::env::temp_dir().join(format!("skill-hub-{}-{}", label, unique));
+        let path = std::env::temp_dir().join(format!("skill-gate-{}-{}", label, unique));
         fs::create_dir_all(&path).unwrap();
         path
     }
@@ -1006,7 +1073,9 @@ mod tests {
             category_confidence: None,
             category_classified_at: None,
             version: Some(String::from("1.0.0")),
-            source: Some(String::from("https://github.com/example/skills/tree/main/demo-skill")),
+            source: Some(String::from(
+                "https://github.com/example/skills/tree/main/demo-skill",
+            )),
             update_capability: UpdateCapability::GitHub,
             update_status: UpdateStatus::Unknown,
             upstream_version: None,
@@ -1145,13 +1214,8 @@ mod tests {
         .unwrap();
         fs::write(remote_dir.join("helper.txt"), "remote helper\n").unwrap();
 
-        apply_remote_snapshot_to_local_skill(
-            &local_dir,
-            &remote_dir,
-            &backup_root,
-            "demo-skill",
-        )
-        .unwrap();
+        apply_remote_snapshot_to_local_skill(&local_dir, &remote_dir, &backup_root, "demo-skill")
+            .unwrap();
 
         assert!(
             local_dir.join("notes").join("keep.txt").exists(),

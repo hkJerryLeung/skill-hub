@@ -2,7 +2,7 @@
 
 > **For Claude:** REQUIRED SUB-SKILL: Use superpowers:executing-plans to implement this plan task-by-task.
 
-**Goal:** Add skill version metadata, update prompts, and one-click GitHub-backed bulk updates to Skill Hub.
+**Goal:** Add skill version metadata, update prompts, and one-click GitHub-backed bulk updates to Skill Gate.
 
 **Architecture:** Extend the Rust scanner to parse frontmatter and merge persisted update cache data into `SkillInfo`. Add a new Rust update workflow that resolves GitHub sources, checks remote metadata, downloads remote skill folders, backs up overwritten files, and writes remote versions back into local `SKILL.md`. Then extend the React UI to surface version and update state in the topbar, grid, and detail panel.
 

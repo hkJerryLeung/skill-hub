@@ -507,7 +507,7 @@ export function SettingsView({
             <div className="settings-about-item">
               <div className="settings-about-label">Product</div>
               <div className="settings-about-value">
-                {appInfo?.product_name ?? "Skill Hub"}
+                {appInfo?.product_name ?? "Skill Gate"}
               </div>
             </div>
             <div className="settings-about-item">
