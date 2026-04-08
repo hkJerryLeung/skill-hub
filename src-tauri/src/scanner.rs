@@ -99,32 +99,146 @@ fn strip_wrapping_quotes(value: &str) -> String {
     trimmed.to_string()
 }
 
-fn parse_skill_frontmatter(content: &str) -> SkillFrontmatter {
-    let mut metadata = SkillFrontmatter::default();
-    let mut lines = content.lines();
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum BlockScalarStyle {
+    Folded,
+    Literal,
+}
 
-    if lines.next().map(str::trim) != Some("---") {
-        return metadata;
+fn leading_whitespace_count(line: &str) -> usize {
+    line.chars().take_while(|char| char.is_whitespace()).count()
+}
+
+fn parse_block_scalar_style(value: &str) -> Option<BlockScalarStyle> {
+    match value.trim().chars().next() {
+        Some('>') => Some(BlockScalarStyle::Folded),
+        Some('|') => Some(BlockScalarStyle::Literal),
+        _ => None,
     }
+}
+
+fn fold_block_scalar_lines(lines: &[String]) -> String {
+    let mut folded = String::new();
+    let mut previous_was_blank = false;
 
     for line in lines {
+        if line.is_empty() {
+            if !folded.is_empty() && !folded.ends_with('\n') {
+                folded.push('\n');
+            }
+            previous_was_blank = true;
+            continue;
+        }
+
+        if !folded.is_empty() && !folded.ends_with('\n') && !previous_was_blank {
+            folded.push(' ');
+        }
+
+        folded.push_str(line);
+        previous_was_blank = false;
+    }
+
+    folded.trim().to_string()
+}
+
+fn collect_block_scalar(lines: &[&str], start_index: usize, parent_indent: usize) -> (Vec<String>, usize) {
+    let mut collected = Vec::new();
+    let mut index = start_index;
+
+    while index < lines.len() {
+        let line = lines[index];
         let trimmed = line.trim();
         if trimmed == "---" {
             break;
         }
 
-        let Some((key, raw_value)) = trimmed.split_once(':') else {
+        let indent = leading_whitespace_count(line);
+        if !trimmed.is_empty() && indent <= parent_indent {
+            break;
+        }
+
+        collected.push(line.to_string());
+        index += 1;
+    }
+
+    if collected.is_empty() {
+        return (Vec::new(), index);
+    }
+
+    let content_indent = collected
+        .iter()
+        .filter(|line| !line.trim().is_empty())
+        .map(|line| leading_whitespace_count(line))
+        .min()
+        .unwrap_or(parent_indent + 1);
+
+    let normalized = collected
+        .into_iter()
+        .map(|line| {
+            if line.trim().is_empty() {
+                String::new()
+            } else {
+                line.chars().skip(content_indent).collect::<String>()
+            }
+        })
+        .collect();
+
+    (normalized, index)
+}
+
+fn parse_skill_frontmatter(content: &str) -> SkillFrontmatter {
+    let mut metadata = SkillFrontmatter::default();
+    let lines: Vec<&str> = content.lines().collect();
+
+    if lines.first().map(|line| line.trim()) != Some("---") {
+        return metadata;
+    }
+
+    let mut index = 1;
+    while index < lines.len() {
+        let line = lines[index];
+        let trimmed = line.trim();
+        if trimmed == "---" {
+            break;
+        }
+
+        let Some((key, raw_value)) = line.split_once(':') else {
+            index += 1;
             continue;
         };
 
+        let key = key.trim();
+        let raw_value = raw_value.trim_start();
+
+        if let Some(style) = parse_block_scalar_style(raw_value) {
+            let (block_lines, next_index) = collect_block_scalar(&lines, index + 1, leading_whitespace_count(line));
+            let value = match style {
+                BlockScalarStyle::Folded => fold_block_scalar_lines(&block_lines),
+                BlockScalarStyle::Literal => block_lines.join("\n").trim().to_string(),
+            };
+
+            match key {
+                "name" => metadata.name = Some(value),
+                "description" => metadata.description = Some(value),
+                "version" => metadata.version = Some(value),
+                "source" => metadata.source = Some(value),
+                _ => {}
+            }
+
+            index = next_index;
+            continue;
+        }
+
         let value = strip_wrapping_quotes(raw_value);
-        match key.trim() {
+        match key {
             "name" => metadata.name = Some(value),
             "description" => metadata.description = Some(value),
             "version" => metadata.version = Some(value),
             "source" => metadata.source = Some(value),
             _ => {}
         }
+
+        index += 1;
     }
 
     metadata
@@ -645,7 +759,9 @@ fn repair_shared_library_links() -> Result<usize, String> {
             shared_skill,
             &skill_name,
             None,
-            LocalConflictStrategy::Skip,
+            // Shared Library is the source of truth. A scan should bring agent
+            // installs back into sync, including backing up same-name local copies.
+            LocalConflictStrategy::BackupAndReplace,
         )?
         .linked;
     }
@@ -1259,6 +1375,7 @@ pub fn batch_migrate_skills(skills: Vec<SkillInfo>, target_agent: &str) -> Resul
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::settings::{self, AppSettings};
     use std::sync::{Mutex, OnceLock};
     use std::time::{SystemTime, UNIX_EPOCH};
 
@@ -1650,6 +1767,83 @@ mod tests {
     }
 
     #[test]
+    fn scanning_uses_configured_shared_library_path_and_replaces_antigravity_conflicts() {
+        with_temp_home(|home| {
+            let shared_dir = home.join("Mounted Skill Library");
+            let antigravity_dir = home.join(".gemini").join("antigravity").join("skills");
+
+            fs::create_dir_all(&shared_dir).unwrap();
+            fs::create_dir_all(&antigravity_dir).unwrap();
+
+            settings::save_settings(&AppSettings {
+                shared_library_path: shared_dir.to_string_lossy().to_string(),
+                ..AppSettings::default()
+            })
+            .unwrap();
+
+            let shared_target = get_agent_paths()
+                .into_iter()
+                .find(|target| target.name == "Shared Library")
+                .expect("missing Shared Library target");
+            assert_eq!(
+                shared_target.path,
+                shared_dir.to_string_lossy(),
+                "scanner should use the configured shared library path instead of the default"
+            );
+
+            let shared_skill = shared_dir.join("react-best-practices");
+            create_skill(&shared_skill);
+            fs::write(
+                shared_skill.join("SKILL.md"),
+                "---\nname: vercel-react-best-practices\nsource: https://github.com/vercel-labs/agent-skills/tree/main/skills/react-best-practices\n---\nbody",
+            )
+            .unwrap();
+
+            let antigravity_local = antigravity_dir.join("react-best-practices");
+            create_skill(&antigravity_local);
+            fs::write(
+                antigravity_local.join("SKILL.md"),
+                "---\nname: react-best-practices\nsource: community\n---\nbody",
+            )
+            .unwrap();
+
+            let scanned = scan_all_skills();
+
+            assert!(
+                antigravity_local.is_symlink(),
+                "scan should replace the conflicting Antigravity local copy with a shared symlink"
+            );
+            assert!(
+                shared_skill.exists(),
+                "shared skill should remain in the configured shared library after scan"
+            );
+            assert_eq!(
+                fs::read_link(&antigravity_local).unwrap(),
+                shared_skill,
+                "Antigravity conflict should be repointed to the configured shared library"
+            );
+
+            let antigravity_skill = scanned
+                .into_iter()
+                .find(|skill| skill.agent == "Antigravity" && skill.path == antigravity_local.to_string_lossy())
+                .expect("missing scanned Antigravity skill");
+            assert!(
+                antigravity_skill.is_symlink,
+                "scanned Antigravity skill should be marked as a symlink after repair"
+            );
+
+            let backups = fs::read_dir(&antigravity_dir)
+                .unwrap()
+                .flatten()
+                .map(|entry| entry.file_name().to_string_lossy().to_string())
+                .filter(|name| name.starts_with("react-best-practices.skill-hub-local-backup"))
+                .collect::<Vec<_>>();
+
+            assert_eq!(backups.len(), 1, "expected one backup of the local conflict");
+        });
+    }
+
+    #[test]
     fn migrating_shared_skill_to_agent_makes_target_local_and_removes_shared_links() {
         with_temp_home(|home| {
             let shared_dir = home.join("SharedSkills");
@@ -1807,6 +2001,52 @@ body"#,
             metadata.source.as_deref(),
             Some("https://github.com/example/skills/tree/main/demo-skill")
         );
+    }
+
+    #[test]
+    fn metadata_parser_extracts_folded_block_description() {
+        let metadata = parse_skill_frontmatter(
+            r#"---
+name: demo-skill
+description: >
+  WWT design system, brand rules, and component patterns.
+  Use when building new UI components.
+metadata:
+  author: wwt
+---
+
+body"#,
+        );
+
+        assert_eq!(metadata.name.as_deref(), Some("demo-skill"));
+        assert_eq!(
+            metadata.description.as_deref(),
+            Some(
+                "WWT design system, brand rules, and component patterns. Use when building new UI components."
+            )
+        );
+    }
+
+    #[test]
+    fn metadata_parser_extracts_literal_block_description() {
+        let metadata = parse_skill_frontmatter(
+            r#"---
+name: demo-skill
+description: |
+  First line.
+  Second line.
+version: 1.2.3
+---
+
+body"#,
+        );
+
+        assert_eq!(metadata.name.as_deref(), Some("demo-skill"));
+        assert_eq!(
+            metadata.description.as_deref(),
+            Some("First line.\nSecond line.")
+        );
+        assert_eq!(metadata.version.as_deref(), Some("1.2.3"));
     }
 
     #[test]

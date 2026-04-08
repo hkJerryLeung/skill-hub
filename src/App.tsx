@@ -3,6 +3,15 @@ import { invoke } from "@tauri-apps/api/core";
 import { open } from "@tauri-apps/plugin-dialog";
 import { revealItemInDir } from "@tauri-apps/plugin-opener";
 import "./styles/global.css";
+import {
+  DownloadIcon,
+  FolderOpenIcon,
+  GlobeIcon,
+  RefreshIcon,
+  SearchIcon,
+  SettingsIcon,
+  TrashIcon,
+} from "./components/Icons/Icons";
 
 import {
   Sidebar,
@@ -186,171 +195,6 @@ function App() {
       y: event.clientY,
       sections,
     });
-  };
-
-  const handleAgentContextMenu = (
-    event: React.MouseEvent,
-    agent: AgentFilter,
-  ) => {
-    const target = targets.find((candidate) => candidate.name === agent);
-    const items = buildSidebarAgentMenuItems({ agent, targets }).map((item) => ({
-      id: item.id,
-      label: item.label,
-      disabled: item.disabled,
-      tone: item.tone,
-      onSelect: async () => {
-        switch (item.id) {
-          case "open":
-            openFilter(agent);
-            break;
-          case "reveal":
-            if (target) {
-              await handleRevealPath(target.path);
-            }
-            break;
-          case "rescan":
-            await handleRescan();
-            break;
-          case "check-updates":
-            await runCheckAll();
-            break;
-          case "update-all":
-            await handleUpdateAll();
-            break;
-          default:
-            break;
-        }
-      },
-    }));
-
-    openContextMenu(event, [{ key: `agent-${agent}`, items }]);
-  };
-
-  const handleDiscoverContextMenu = (
-    event: React.MouseEvent,
-    view: DiscoverView,
-  ) => {
-    const items = buildDiscoverMenuItems({ view }).map((item) => ({
-      id: item.id,
-      label: item.label,
-      disabled: item.disabled,
-      tone: item.tone,
-      onSelect: async () => {
-        switch (item.id) {
-          case "open":
-            openDiscover(view);
-            break;
-          case "refresh-source":
-            if (view === "huggingface" || view === "skills.sh") {
-              await loadRemoteMarket(view);
-            }
-            break;
-          default:
-            break;
-        }
-      },
-    }));
-
-    openContextMenu(event, [{ key: `discover-${view}`, items }]);
-  };
-
-  const handleSettingsContextMenu = (event: React.MouseEvent) => {
-    const items = buildSettingsMenuItems().map((item) => ({
-      id: item.id,
-      label: item.label,
-      disabled: item.disabled,
-      tone: item.tone,
-      onSelect: async () => {
-        switch (item.id) {
-          case "open-settings":
-            openSettings();
-            break;
-          case "load-defaults":
-            await handleLoadDefaults();
-            break;
-          default:
-            break;
-        }
-      },
-    }));
-
-    openContextMenu(event, [{ key: "settings", items }]);
-  };
-
-  const handleCardContextMenu = (
-    event: React.MouseEvent,
-    skill: SkillInfo,
-  ) => {
-    const clickedId = getSkillId(skill);
-    const selectedBatch = selectedIds.has(clickedId)
-      ? skills.filter((candidate) => selectedIds.has(getSkillId(candidate)))
-      : [skill];
-    const primarySkill = selectedBatch[0];
-    const menu = buildSkillMenuItems({
-      selectedSkills: selectedBatch,
-      targets,
-    });
-    const buildSection = (
-      key: string,
-      items: typeof menu.primary,
-    ): ContextMenuSection => ({
-      key,
-      items: items.map((item) => ({
-        id: item.id,
-        label: item.label,
-        disabled: item.disabled,
-        tone: item.tone,
-        onSelect: async () => {
-          switch (item.id) {
-            case "open-details":
-              if (primarySkill) {
-                setSelectedIds(new Set([getSkillId(primarySkill)]));
-                await openDetail(primarySkill);
-              }
-              break;
-            case "reveal":
-              if (primarySkill) {
-                await handleRevealPath(primarySkill.path);
-              }
-              break;
-            case "check-update":
-              if (primarySkill) {
-                await handleCheckSkill(primarySkill);
-              }
-              break;
-            case "update-skill":
-              if (primarySkill) {
-                await runSingleSkillUpdate(primarySkill);
-              }
-              break;
-            case "remove":
-              if (primarySkill) {
-                await handleRemoveSkill(primarySkill);
-              }
-              break;
-            default:
-              if (item.id.startsWith("install-") && primarySkill && item.target) {
-                await handleInstallSpecific(primarySkill, item.target);
-                break;
-              }
-              if (item.id.startsWith("move-") && item.target) {
-                await executeMigrationBatch(
-                  selectedBatch,
-                  item.target as AgentFilter,
-                );
-              }
-              break;
-          }
-        },
-      })),
-    });
-
-    openContextMenu(event, [
-      buildSection("primary", menu.primary),
-      buildSection("install", menu.install),
-      buildSection("move", menu.move),
-      buildSection("danger", menu.danger),
-    ]);
   };
 
   const refreshSkills = async (options?: { reloadSelected?: boolean }) => {
