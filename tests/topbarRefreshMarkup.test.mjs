@@ -12,13 +12,33 @@ const [topbarRowSource, statsBarSource] = topbarSource.split(
 assert.ok(statsBarSource, "Expected Topbar to render a stats bar section");
 assert.match(
   statsBarSource,
-  /className=\{`stats-refresh-btn \$\{refreshing \? 'spinning' : ''\}`\}/,
+  /stats-refresh-btn[\s\S]*onClick=\{onRefresh\}/,
   "Expected refresh button to live inside the stats bar",
 );
 assert.doesNotMatch(
   topbarRowSource,
   /stats-refresh-btn/,
   "Refresh button should not be rendered in the top row",
+);
+assert.match(
+  statsBarSource,
+  /Category Filter/,
+  "Expected Shared Library stats bar to render a category filter trigger",
+);
+assert.match(
+  topbarSource,
+  /selectedSharedCategories/,
+  "Expected Topbar props to accept selected shared categories",
+);
+assert.doesNotMatch(
+  topbarSource,
+  /sharedCategoryLabel/,
+  "Topbar should stop using the breadcrumb category label prop",
+);
+assert.doesNotMatch(
+  topbarSource,
+  /Shared Library \/ \$\{sharedCategoryLabel\}/,
+  "Topbar title should stay on Shared Library instead of breadcrumbing category navigation",
 );
 
 const iconsSource = readFileSync(

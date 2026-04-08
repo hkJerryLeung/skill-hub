@@ -48,6 +48,14 @@ export interface SidebarPointerPoint {
   clientY: number;
 }
 
+export interface DropTargetRect {
+  targetKey: string | null | undefined;
+  left: number;
+  right: number;
+  top: number;
+  bottom: number;
+}
+
 export interface PointerDragThreshold {
   startX: number;
   startY: number;
@@ -108,10 +116,6 @@ export function resolveMigrationBatch<T extends MigrationBatchSkill>(
 export function resolveSidebarDropTargetKey(
   agentKey: string | null | undefined,
 ): DragSidebarTarget | null {
-  if (agentKey?.startsWith("shared-category:")) {
-    return agentKey as DragSidebarTarget;
-  }
-
   switch (agentKey) {
     case "Shared Library":
     case "Claude Code":
@@ -121,6 +125,16 @@ export function resolveSidebarDropTargetKey(
     default:
       return null;
   }
+}
+
+export function resolveDropTargetKey(
+  targetKey: string | null | undefined,
+): DragSidebarTarget | null {
+  if (targetKey?.startsWith("shared-category:")) {
+    return targetKey as DragSidebarTarget;
+  }
+
+  return resolveSidebarDropTargetKey(targetKey);
 }
 
 export function resolveSidebarTargetFromPoint(
@@ -136,6 +150,21 @@ export function resolveSidebarTargetFromPoint(
   );
 
   return resolveSidebarDropTargetKey(hoveredRect?.agentKey);
+}
+
+export function resolveDropTargetFromPoint(
+  rects: DropTargetRect[],
+  point: SidebarPointerPoint,
+): DragSidebarTarget | null {
+  const hoveredRect = rects.find(
+    (rect) =>
+      point.clientX >= rect.left &&
+      point.clientX <= rect.right &&
+      point.clientY >= rect.top &&
+      point.clientY <= rect.bottom,
+  );
+
+  return resolveDropTargetKey(hoveredRect?.targetKey);
 }
 
 export function shouldStartPointerDrag({

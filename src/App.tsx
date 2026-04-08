@@ -27,10 +27,10 @@ import { MarketView } from "./components/MarketView/MarketView";
 import { SettingsView } from "./components/SettingsView/SettingsView";
 import {
   type DragSidebarTarget,
+  resolveDropTargetFromPoint,
   resolveDragEndFallbackTarget,
   resolveDragLeaveSnapshot,
   resolveMigrationBatch,
-  resolveSidebarTargetFromPoint,
   shouldStartPointerDrag,
 } from "./lib/dragDropState";
 import {
@@ -57,10 +57,7 @@ import {
   type AppSettings,
 } from "./lib/appSettings";
 import { type RemoteMarketEntry, type RemoteMarketSource } from "./lib/marketTypes";
-import {
-  getSharedLibraryCategoryLabel,
-  SHARED_LIBRARY_CATEGORIES,
-} from "./lib/sharedLibraryCategories";
+import { getSharedLibraryCategoryLabel } from "./lib/sharedLibraryCategories";
 
 interface Toast {
   message: string;
@@ -122,7 +119,8 @@ function App() {
   const [skills, setSkills] = useState<SkillInfo[]>([]);
   const [loading, setLoading] = useState(true);
   const [filter, setFilter] = useState<AgentFilter>("all");
-  const [sharedCategoryFilter, setSharedCategoryFilter] = useState<string | null>(null);
+  const [selectedSharedCategories, setSelectedSharedCategories] = useState<Set<string>>(new Set());
+  const [collapsedSharedCategories, setCollapsedSharedCategories] = useState<Set<string>>(new Set());
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState<StatusFilter>("all");
   const [settingsOpen, setSettingsOpen] = useState(false);
@@ -299,7 +297,6 @@ function App() {
     closeContextMenu();
     closeDetail();
     setDiscoverView(null);
-    setSharedCategoryFilter(null);
     setSettingsOpen(true);
   };
 
@@ -308,7 +305,6 @@ function App() {
     setSettingsOpen(false);
     setDiscoverView(null);
     setFilter(nextFilter);
-    setSharedCategoryFilter(null);
     setStatusFilter((current) => {
       if (
         nextFilter === "Shared Library" &&
@@ -321,21 +317,11 @@ function App() {
     });
   };
 
-  const openSharedLibraryCategory = (categorySlug: string) => {
-    closeContextMenu();
-    setSettingsOpen(false);
-    setDiscoverView(null);
-    setFilter("Shared Library");
-    setSharedCategoryFilter(categorySlug);
-    setStatusFilter("all");
-  };
-
   const openDiscover = (view: DiscoverView) => {
     closeContextMenu();
     closeDetail();
     setSelectedIds(new Set());
     setSettingsOpen(false);
-    setSharedCategoryFilter(null);
     setDiscoverView(view);
   };
 
@@ -490,7 +476,19 @@ function App() {
       ).map((row) => {
         const rect = row.getBoundingClientRect();
         return {
-          agentKey: row.dataset.agentKey,
+          targetKey: row.dataset.agentKey,
+          left: rect.left,
+          right: rect.right,
+          top: rect.top,
+          bottom: rect.bottom,
+        };
+      });
+      const categoryRows = Array.from(
+        document.querySelectorAll<HTMLElement>("[data-drop-target]"),
+      ).map((row) => {
+        const rect = row.getBoundingClientRect();
+        return {
+          targetKey: row.dataset.dropTarget,
           left: rect.left,
           right: rect.right,
           top: rect.top,
@@ -498,7 +496,7 @@ function App() {
         };
       });
 
-      const nextTarget = resolveSidebarTargetFromPoint(sidebarRows, {
+      const nextTarget = resolveDropTargetFromPoint([...sidebarRows, ...categoryRows], {
         clientX: event.clientX,
         clientY: event.clientY,
       });
@@ -524,7 +522,7 @@ function App() {
 
   const handleGridMouseDown = (e: React.MouseEvent) => {
     closeContextMenu();
-    if ((e.target as HTMLElement).closest(".skill-card")) {
+    if ((e.target as HTMLElement).closest(".skill-card, .shared-category-header")) {
       return;
     }
 
@@ -879,7 +877,19 @@ function App() {
       ).map((row) => {
         const rect = row.getBoundingClientRect();
         return {
-          agentKey: row.dataset.agentKey,
+          targetKey: row.dataset.agentKey,
+          left: rect.left,
+          right: rect.right,
+          top: rect.top,
+          bottom: rect.bottom,
+        };
+      });
+      const categoryRows = Array.from(
+        document.querySelectorAll<HTMLElement>("[data-drop-target]"),
+      ).map((row) => {
+        const rect = row.getBoundingClientRect();
+        return {
+          targetKey: row.dataset.dropTarget,
           left: rect.left,
           right: rect.right,
           top: rect.top,
@@ -887,7 +897,7 @@ function App() {
         };
       });
 
-      const nextTarget = resolveSidebarTargetFromPoint(sidebarRows, {
+      const nextTarget = resolveDropTargetFromPoint([...sidebarRows, ...categoryRows], {
         clientX: event.clientX,
         clientY: event.clientY,
       });
@@ -1463,30 +1473,29 @@ function App() {
     }
   }, [filter, statusFilter]);
 
-  const { skills: filtered, statusCounts } = buildBrowserSkillPresentation(
+  const {
+    skills: filtered,
+    statusCounts,
+    sharedCategoryGroups,
+    sharedCategoryCounts,
+  } = buildBrowserSkillPresentation(
     skills,
     filter,
     search,
     statusFilter,
-    filter === "Shared Library" ? sharedCategoryFilter : null,
+    filter === "Shared Library" ? selectedSharedCategories : new Set<string>(),
   );
 
-  const sharedCategoryItems = SHARED_LIBRARY_CATEGORIES.map((category) => ({
-    ...category,
-    count: new Set(
-      skills
-        .filter(
-          (skill) =>
-            skill.agent === "Shared Library" &&
-            (skill.category ?? DEFAULT_SHARED_CATEGORY) === category.slug,
-        )
-        .map((skill) => skill.canonical_path || skill.path),
-    ).size,
-  }));
-  const sharedCategoryLabel =
-    filter === "Shared Library"
-      ? getSharedLibraryCategoryLabel(sharedCategoryFilter)
-      : null;
+  useEffect(() => {
+    setCollapsedSharedCategories((current) => {
+      const activeGroups = new Set(sharedCategoryGroups.map((group) => group.slug));
+      const next = new Set(
+        Array.from(current).filter((slug) => activeGroups.has(slug)),
+      );
+
+      return next.size === current.size ? current : next;
+    });
+  }, [sharedCategoryGroups]);
 
   const countByAgent = (agent: string) =>
     agent === "all"
@@ -1590,9 +1599,6 @@ function App() {
       <Sidebar
         activeItem={activeSidebarItem}
         setFilter={openFilter}
-        activeSharedCategory={sharedCategoryFilter}
-        sharedCategories={sharedCategoryItems}
-        onOpenSharedCategory={openSharedLibraryCategory}
         onOpenDiscover={openDiscover}
         onOpenSettings={openSettings}
         onAgentContextMenu={handleSidebarAgentContextMenu}
@@ -1654,11 +1660,12 @@ function App() {
           <>
             <Topbar
               filter={filter}
-              sharedCategoryLabel={sharedCategoryLabel}
               search={search}
               setSearch={setSearch}
               statusFilter={statusFilter}
               statusCounts={statusCounts}
+              sharedCategoryCounts={sharedCategoryCounts}
+              selectedSharedCategories={selectedSharedCategories}
               refreshing={topbarRefreshState.spinning}
               refreshDisabled={topbarRefreshState.disabled}
               refreshLabel={topbarRefreshState.label}
@@ -1667,6 +1674,17 @@ function App() {
               autoCategorizing={autoCategorizing}
               categorizationEnabled={appSettings?.categorization_enabled ?? false}
               onStatusFilterChange={handleStatusFilterChange}
+              onToggleSharedCategory={(slug) => {
+                setSelectedSharedCategories((current) => {
+                  const next = new Set(current);
+                  if (next.has(slug)) next.delete(slug);
+                  else next.add(slug);
+                  return next;
+                });
+              }}
+              onClearSharedCategories={() => {
+                setSelectedSharedCategories(new Set());
+              }}
               onRefresh={handleRescan}
               onCheckUpdates={runCheckAll}
               onUpdateAll={handleUpdateAll}
@@ -1675,6 +1693,10 @@ function App() {
 
             <SkillGrid
               filtered={filtered}
+              sharedCategoryGroups={sharedCategoryGroups}
+              isSharedLibraryView={filter === "Shared Library"}
+              collapsedSharedCategories={collapsedSharedCategories}
+              dragOverTarget={dragOverTarget}
               loading={loading}
               search={search}
               selectedIds={selectedIds}
@@ -1688,6 +1710,23 @@ function App() {
               updatesLocked={
                 checkingAll || updatingAll || updatingSkillCanonicalPath !== null
               }
+              onToggleSharedCategory={(slug) => {
+                setCollapsedSharedCategories((current) => {
+                  const next = new Set(current);
+                  if (next.has(slug)) next.delete(slug);
+                  else next.add(slug);
+                  return next;
+                });
+              }}
+              onSharedCategoryDragOver={(event, slug) => {
+                handleDragOver(event, `shared-category:${slug}`);
+              }}
+              onSharedCategoryDragLeave={(event, slug) => {
+                handleDragLeave(event, `shared-category:${slug}`);
+              }}
+              onSharedCategoryDrop={(event, slug) => {
+                void handleDrop(event, `shared-category:${slug}`);
+              }}
               onInlineUpdate={handleInlineUpdate}
             />
           </>

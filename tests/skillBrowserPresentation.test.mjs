@@ -89,14 +89,30 @@ const presentedShared = buildBrowserSkillPresentation(
   "Shared Library",
   "",
   "all",
-  null,
+  new Set(),
 );
 
 assert.deepStrictEqual(
   presentedShared.skills.map((skill) => [skill.name, skill.is_symlink]),
   [
-    ["find-skills", true],
     ["vercel-react-best-practices", true],
+    ["find-skills", true],
+  ],
+);
+assert.deepStrictEqual(
+  presentedShared.sharedCategoryGroups.map((group) => [group.slug, group.skills.map((skill) => skill.name)]),
+  [
+    ["development-code-tools", ["vercel-react-best-practices"]],
+    ["security-systems", ["find-skills"]],
+  ],
+);
+assert.deepStrictEqual(
+  presentedShared.sharedCategoryCounts
+    .filter((group) => group.count > 0)
+    .map((group) => [group.slug, group.count]),
+  [
+    ["development-code-tools", 1],
+    ["security-systems", 1],
   ],
 );
 
@@ -121,12 +137,38 @@ const presentedSharedCategory = buildBrowserSkillPresentation(
   "Shared Library",
   "",
   "all",
-  "security-systems",
+  new Set(["security-systems"]),
 );
 
 assert.deepStrictEqual(
   presentedSharedCategory.skills.map((skill) => skill.name),
   ["find-skills"],
+);
+assert.deepStrictEqual(
+  presentedSharedCategory.sharedCategoryGroups.map((group) => group.slug),
+  ["security-systems"],
+);
+
+const presentedSharedMultipleCategories = buildBrowserSkillPresentation(
+  [
+    sharedFindSkills,
+    claudeFindSkills,
+    codexFindSkills,
+    antigravityFindSkills,
+    sharedReact,
+    claudeReact,
+    codexReact,
+    antigravityReactLocal,
+  ],
+  "Shared Library",
+  "",
+  "all",
+  new Set(["security-systems", "development-code-tools"]),
+);
+
+assert.deepStrictEqual(
+  presentedSharedMultipleCategories.sharedCategoryGroups.map((group) => group.slug),
+  ["development-code-tools", "security-systems"],
 );
 
 console.log("skillBrowserPresentation test passed");

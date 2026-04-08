@@ -15,7 +15,7 @@ assert.equal(
 
 assert.equal(
   resolveSidebarTargetFromPoint(rects, { clientX: 120, clientY: 100 }),
-  "shared-category:data-analysis",
+  null,
 );
 
 assert.equal(

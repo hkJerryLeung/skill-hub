@@ -1,6 +1,7 @@
 import './SkillGrid.css';
 import { SearchIcon } from '../Icons/Icons'; // We'll use SearchIcon for the empty state
 import { getSkillId } from '../../lib/skillIdentity';
+import type { SharedCategoryPresentation } from '../../lib/skillListPresentation';
 import { getSharedLibraryCategoryLabel } from '../../lib/sharedLibraryCategories';
 import {
   canTriggerInlineUpdate,
@@ -19,6 +20,10 @@ export interface SelectionBox {
 
 interface SkillGridProps {
   filtered: SkillInfo[];
+  sharedCategoryGroups: SharedCategoryPresentation[];
+  isSharedLibraryView: boolean;
+  collapsedSharedCategories: ReadonlySet<string>;
+  dragOverTarget: string | null;
   loading: boolean;
   search: string;
   selectedIds: Set<string>;
@@ -30,11 +35,19 @@ interface SkillGridProps {
   onCardContextMenu: (e: React.MouseEvent, skill: SkillInfo) => void;
   updatingSkillCanonicalPath: string | null;
   updatesLocked: boolean;
+  onToggleSharedCategory: (slug: string) => void;
+  onSharedCategoryDragOver: (e: React.DragEvent, slug: string) => void;
+  onSharedCategoryDragLeave: (e: React.DragEvent, slug: string) => void;
+  onSharedCategoryDrop: (e: React.DragEvent, slug: string) => void;
   onInlineUpdate: (skill: SkillInfo) => void;
 }
 
 export function SkillGrid({
   filtered,
+  sharedCategoryGroups,
+  isSharedLibraryView,
+  collapsedSharedCategories,
+  dragOverTarget,
   loading,
   search,
   selectedIds,
@@ -46,8 +59,88 @@ export function SkillGrid({
   onCardContextMenu,
   updatingSkillCanonicalPath,
   updatesLocked,
+  onToggleSharedCategory,
+  onSharedCategoryDragOver,
+  onSharedCategoryDragLeave,
+  onSharedCategoryDrop,
   onInlineUpdate,
 }: SkillGridProps) {
+  const renderSkillCards = (skills: SkillInfo[]) =>
+    skills.map((skill) => {
+      const id = getSkillId(skill);
+      const isSelected = selectedIds.has(id);
+      const isDetailActive = activeDetailId === id;
+      const updateStatusLabel = getCardStatusLabel(skill);
+      const inlineUpdateLabel = getInlineUpdateLabel(skill);
+      const inlineUpdateEnabled = canTriggerInlineUpdate(skill);
+      const isInlineUpdating =
+        updatingSkillCanonicalPath === skill.canonical_path;
+
+      return (
+        <div
+          ref={(el) => {
+            if (el) cardRefs.current.set(id, el);
+            else cardRefs.current.delete(id);
+          }}
+          className={`skill-card ${isSelected ? "multi-selected" : ""} ${
+            isDetailActive ? "selected" : ""
+          }`}
+          key={id}
+          onClick={(e) => onCardClick(e, skill)}
+          onMouseDown={(e) => onCardMouseDown(e, skill)}
+          onContextMenu={(e) => onCardContextMenu(e, skill)}
+        >
+          <div className="skill-card-header">
+            <span className="skill-card-name">{skill.name}</span>
+            <span
+              className={`skill-card-badge ${
+                skill.is_symlink ? "symlink" : "local"
+              }`}
+            >
+              {skill.is_symlink ? "SYMLINK" : "LOCAL"}
+            </span>
+          </div>
+          <div className="skill-card-desc">{skill.description}</div>
+          {(inlineUpdateLabel || updateStatusLabel) && (
+            <div className="skill-card-meta-row">
+              {inlineUpdateEnabled ? (
+                <button
+                  type="button"
+                  className={`skill-card-update skill-card-update-button skill-card-update-${skill.update_status}`}
+                  onMouseDown={(e) => e.stopPropagation()}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    onInlineUpdate(skill);
+                  }}
+                  disabled={updatesLocked || isInlineUpdating}
+                >
+                  {isInlineUpdating ? "Updating..." : inlineUpdateLabel}
+                </button>
+              ) : updateStatusLabel ? (
+                <span
+                  className={`skill-card-update skill-card-update-${skill.update_status}`}
+                >
+                  {updateStatusLabel}
+                </span>
+              ) : null}
+            </div>
+          )}
+          <div className="skill-card-footer">
+            <div className="skill-card-footer-left">
+              {(skill.category ?? (skill.agent === "Shared Library" ? "uncategorized" : null)) && (
+                <span className="skill-card-category">
+                  {getSharedLibraryCategoryLabel(
+                    skill.category ?? (skill.agent === "Shared Library" ? "uncategorized" : null),
+                  ) ?? skill.category}
+                </span>
+              )}
+            </div>
+            <span className="skill-card-version">{getVersionLabel(skill)}</span>
+          </div>
+        </div>
+      );
+    });
+
   return (
     <div className="skill-grid-container" onMouseDown={onGridMouseDown}>
       {loading ? (
@@ -67,83 +160,47 @@ export function SkillGrid({
               : "No skills detected in agent directories"}
           </p>
         </div>
-      ) : (
-        <div className="skill-grid">
-          {filtered.map((skill) => {
-            const id = getSkillId(skill);
-            const isSelected = selectedIds.has(id);
-            const isDetailActive = activeDetailId === id;
-            const updateStatusLabel = getCardStatusLabel(skill);
-            const inlineUpdateLabel = getInlineUpdateLabel(skill);
-            const inlineUpdateEnabled = canTriggerInlineUpdate(skill);
-            const isInlineUpdating =
-              updatingSkillCanonicalPath === skill.canonical_path;
+      ) : isSharedLibraryView ? (
+        <div className="shared-category-list">
+          {sharedCategoryGroups.map((group) => {
+            const collapsed = collapsedSharedCategories.has(group.slug);
+            const targetKey = `shared-category:${group.slug}`;
 
             return (
-              <div
-                ref={(el) => {
-                  if (el) cardRefs.current.set(id, el);
-                  else cardRefs.current.delete(id);
-                }}
-                className={`skill-card ${isSelected ? "multi-selected" : ""} ${
-                  isDetailActive ? "selected" : ""
-                }`}
-                key={id}
-                onClick={(e) => onCardClick(e, skill)}
-                onMouseDown={(e) => onCardMouseDown(e, skill)}
-                onContextMenu={(e) => onCardContextMenu(e, skill)}
-              >
-                <div className="skill-card-header">
-                  <span className="skill-card-name">{skill.name}</span>
-                  <span
-                    className={`skill-card-badge ${
-                      skill.is_symlink ? "symlink" : "local"
-                    }`}
-                  >
-                    {skill.is_symlink ? "SYMLINK" : "LOCAL"}
+              <section key={group.slug} className="shared-category-section">
+                <button
+                  type="button"
+                  className={`shared-category-header ${
+                    dragOverTarget === targetKey ? "drag-over" : ""
+                  }`}
+                  data-drop-target={`shared-category:${group.slug}`}
+                  onClick={() => onToggleSharedCategory(group.slug)}
+                  onDragEnter={(e) => onSharedCategoryDragOver(e, group.slug)}
+                  onDragOver={(e) => onSharedCategoryDragOver(e, group.slug)}
+                  onDragLeave={(e) => onSharedCategoryDragLeave(e, group.slug)}
+                  onDrop={(e) => onSharedCategoryDrop(e, group.slug)}
+                >
+                  <span className="shared-category-header-text">
+                    {group.label}
                   </span>
-                </div>
-                <div className="skill-card-desc">{skill.description}</div>
-                {(inlineUpdateLabel || updateStatusLabel) && (
-                  <div className="skill-card-meta-row">
-                    {inlineUpdateEnabled ? (
-                      <button
-                        type="button"
-                        className={`skill-card-update skill-card-update-button skill-card-update-${skill.update_status}`}
-                        onMouseDown={(e) => e.stopPropagation()}
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          onInlineUpdate(skill);
-                        }}
-                        disabled={updatesLocked || isInlineUpdating}
-                      >
-                        {isInlineUpdating ? "Updating..." : inlineUpdateLabel}
-                      </button>
-                    ) : updateStatusLabel ? (
-                      <span
-                        className={`skill-card-update skill-card-update-${skill.update_status}`}
-                      >
-                        {updateStatusLabel}
-                      </span>
-                    ) : null}
+                  <span className="shared-category-header-meta">
+                    <span className="shared-category-count">{group.skills.length}</span>
+                    <span className={`shared-category-chevron ${collapsed ? "collapsed" : ""}`}>
+                      {collapsed ? "+" : "-"}
+                    </span>
+                  </span>
+                </button>
+                {!collapsed && (
+                  <div className="skill-grid">
+                    {renderSkillCards(group.skills)}
                   </div>
                 )}
-                <div className="skill-card-footer">
-                  <div className="skill-card-footer-left">
-                    {(skill.category ?? (skill.agent === "Shared Library" ? "uncategorized" : null)) && (
-                      <span className="skill-card-category">
-                        {getSharedLibraryCategoryLabel(
-                          skill.category ?? (skill.agent === "Shared Library" ? "uncategorized" : null),
-                        ) ?? skill.category}
-                      </span>
-                    )}
-                  </div>
-                  <span className="skill-card-version">{getVersionLabel(skill)}</span>
-                </div>
-              </div>
+              </section>
             );
           })}
         </div>
+      ) : (
+        <div className="skill-grid">{renderSkillCards(filtered)}</div>
       )}
     </div>
   );

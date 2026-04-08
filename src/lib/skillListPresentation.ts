@@ -1,14 +1,33 @@
 import type { StatusCounts, StatusFilter } from "./skillFilters";
 import type { SkillInfo } from "./skillTypes";
+import {
+  DEFAULT_SHARED_CATEGORY_SLUG,
+  getSharedLibraryCategoryLabel,
+  SHARED_LIBRARY_CATEGORIES,
+} from "./sharedLibraryCategories.ts";
 
 interface SkillGroup {
   skills: SkillInfo[];
   firstIndex: number;
 }
 
+export interface SharedCategoryPresentation {
+  slug: string;
+  label: string;
+  skills: SkillInfo[];
+}
+
+export interface SharedCategoryCount {
+  slug: string;
+  label: string;
+  count: number;
+}
+
 interface SkillPresentation {
   skills: SkillInfo[];
   statusCounts: StatusCounts;
+  sharedCategoryGroups: SharedCategoryPresentation[];
+  sharedCategoryCounts: SharedCategoryCount[];
 }
 
 function withDisplaySymlink(skill: SkillInfo, isSymlink: boolean): SkillInfo {
@@ -91,13 +110,62 @@ function filterSkillsByStatus(
   }
 }
 
+function getSharedCategorySlug(skill: SkillInfo): string {
+  return skill.category ?? DEFAULT_SHARED_CATEGORY_SLUG;
+}
+
+function getSharedCategoryOrder(slug: string): number {
+  const index = SHARED_LIBRARY_CATEGORIES.findIndex((category) => category.slug === slug);
+  return index === -1 ? SHARED_LIBRARY_CATEGORIES.length : index;
+}
+
+function buildSharedCategoryGroups(skills: SkillInfo[]): SharedCategoryPresentation[] {
+  const groups = new Map<string, SkillInfo[]>();
+
+  skills.forEach((skill) => {
+    const slug = getSharedCategorySlug(skill);
+    const bucket = groups.get(slug);
+    if (bucket) {
+      bucket.push(skill);
+      return;
+    }
+
+    groups.set(slug, [skill]);
+  });
+
+  return Array.from(groups.entries())
+    .sort((left, right) => getSharedCategoryOrder(left[0]) - getSharedCategoryOrder(right[0]))
+    .map(([slug, groupedSkills]) => ({
+      slug,
+      label: getSharedLibraryCategoryLabel(slug) ?? slug,
+      skills: groupedSkills,
+    }));
+}
+
+function buildSharedCategoryCounts(skills: SkillInfo[]): SharedCategoryCount[] {
+  const counts = new Map<string, number>();
+
+  skills.forEach((skill) => {
+    const slug = getSharedCategorySlug(skill);
+    counts.set(slug, (counts.get(slug) ?? 0) + 1);
+  });
+
+  return SHARED_LIBRARY_CATEGORIES.map((category) => ({
+    slug: category.slug,
+    label: category.label,
+    count: counts.get(category.slug) ?? 0,
+  }));
+}
+
 export function buildSkillPresentation(
   skills: SkillInfo[],
   agentFilter: string,
   statusFilter: StatusFilter = "all",
-  sharedCategory: string | null = null,
+  selectedSharedCategories: ReadonlySet<string> = new Set<string>(),
 ): SkillPresentation {
   const groups = buildGroups(skills);
+  const emptySharedCategoryGroups: SharedCategoryPresentation[] = [];
+  const emptySharedCategoryCounts: SharedCategoryCount[] = [];
 
   if (agentFilter === "Shared Library") {
     const presentedSharedSkills = groups
@@ -105,17 +173,24 @@ export function buildSkillPresentation(
         group.skills.some((skill) => skill.agent === "Shared Library"),
       )
       .map((group) => presentSharedLibraryGroup(group.skills));
-    const categoryScopedSkills =
-      sharedCategory === null
-        ? presentedSharedSkills
-        : presentedSharedSkills.filter(
-            (skill) => (skill.category ?? "uncategorized") === sharedCategory,
-          );
-    const statusCounts = getFallbackStatusCounts(categoryScopedSkills);
+    const statusCounts = getFallbackStatusCounts(presentedSharedSkills);
+    const statusFilteredSharedSkills = filterSkillsByStatus(
+      presentedSharedSkills,
+      statusFilter,
+    );
+    const sharedCategoryCounts = buildSharedCategoryCounts(statusFilteredSharedSkills);
+    const sharedCategoryGroups = buildSharedCategoryGroups(statusFilteredSharedSkills);
+    const visibleSharedCategoryGroups = sharedCategoryGroups.filter(
+      (group) =>
+        selectedSharedCategories.size === 0 ||
+        selectedSharedCategories.has(group.slug),
+    );
 
     return {
-      skills: filterSkillsByStatus(categoryScopedSkills, statusFilter),
+      skills: visibleSharedCategoryGroups.flatMap((group) => group.skills),
       statusCounts,
+      sharedCategoryGroups: visibleSharedCategoryGroups,
+      sharedCategoryCounts,
     };
   }
 
@@ -130,6 +205,8 @@ export function buildSkillPresentation(
     return {
       skills: filterSkillsByStatus(presentedAgentSkills, statusFilter),
       statusCounts,
+      sharedCategoryGroups: emptySharedCategoryGroups,
+      sharedCategoryCounts: emptySharedCategoryCounts,
     };
   }
 
@@ -155,12 +232,32 @@ export function buildSkillPresentation(
 
   switch (statusFilter) {
     case "symlinked":
-      return { skills: presentedSymlinked, statusCounts };
+      return {
+        skills: presentedSymlinked,
+        statusCounts,
+        sharedCategoryGroups: emptySharedCategoryGroups,
+        sharedCategoryCounts: emptySharedCategoryCounts,
+      };
     case "local":
-      return { skills: presentedLocal, statusCounts };
+      return {
+        skills: presentedLocal,
+        statusCounts,
+        sharedCategoryGroups: emptySharedCategoryGroups,
+        sharedCategoryCounts: emptySharedCategoryCounts,
+      };
     case "updates":
-      return { skills: presentedUpdates, statusCounts };
+      return {
+        skills: presentedUpdates,
+        statusCounts,
+        sharedCategoryGroups: emptySharedCategoryGroups,
+        sharedCategoryCounts: emptySharedCategoryCounts,
+      };
     default:
-      return { skills: presentedAll, statusCounts };
+      return {
+        skills: presentedAll,
+        statusCounts,
+        sharedCategoryGroups: emptySharedCategoryGroups,
+        sharedCategoryCounts: emptySharedCategoryCounts,
+      };
   }
 }

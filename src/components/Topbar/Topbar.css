@@ -61,46 +61,6 @@
   cursor: not-allowed;
 }
 
-.stats-refresh-btn {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 36px;
-  height: 36px;
-  flex-shrink: 0;
-  margin-left: auto;
-  border: 1px solid var(--border-default);
-  border-radius: var(--radius-sm);
-  background: var(--bg-surface);
-  color: var(--text-secondary);
-  cursor: pointer;
-  transition:
-    border-color var(--duration-fast) var(--ease-out),
-    background var(--duration-fast) var(--ease-out),
-    color var(--duration-fast) var(--ease-out),
-    transform var(--duration-fast) var(--ease-out);
-}
-
-.stats-refresh-btn:hover:not(:disabled) {
-  border-color: var(--border-strong);
-  background: var(--bg-hover);
-  color: var(--text-primary);
-}
-
-.stats-refresh-btn:focus-visible {
-  outline: none;
-  border-color: rgba(153, 0, 17, 0.45);
-}
-
-.stats-refresh-btn:disabled {
-  opacity: 0.45;
-  cursor: not-allowed;
-}
-
-.stats-refresh-btn.spinning svg {
-  animation: topbar-refresh-spin 0.9s linear infinite;
-}
-
 .search-box {
   flex: 1;
   max-width: 320px;
@@ -140,11 +100,26 @@
 
 .stats-bar {
   display: flex;
-  flex-wrap: wrap;
-  gap: var(--sp-6);
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--sp-4);
   padding: 14px var(--sp-6);
   border-bottom: 1px solid var(--border-subtle);
   background: var(--bg-panel);
+}
+
+.stats-bar-items {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--sp-6);
+  min-width: 0;
+}
+
+.stats-bar-actions {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-3);
+  margin-left: auto;
 }
 
 .stat-item {
@@ -190,6 +165,201 @@
   font-weight: 700;
   color: var(--text-primary);
   font-size: var(--font-md);
+}
+
+.stats-refresh-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 36px;
+  height: 36px;
+  flex-shrink: 0;
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-sm);
+  background: var(--bg-surface);
+  color: var(--text-secondary);
+  cursor: pointer;
+  transition:
+    border-color var(--duration-fast) var(--ease-out),
+    background var(--duration-fast) var(--ease-out),
+    color var(--duration-fast) var(--ease-out),
+    transform var(--duration-fast) var(--ease-out);
+}
+
+.stats-refresh-btn:hover:not(:disabled) {
+  border-color: var(--border-strong);
+  background: var(--bg-hover);
+  color: var(--text-primary);
+}
+
+.stats-refresh-btn:focus-visible {
+  outline: none;
+  border-color: rgba(153, 0, 17, 0.45);
+}
+
+.stats-refresh-btn:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.stats-refresh-btn.spinning svg {
+  animation: topbar-refresh-spin 0.9s linear infinite;
+}
+
+.category-filter {
+  position: relative;
+}
+
+.category-filter-trigger,
+.category-filter-clear {
+  font-family: inherit;
+}
+
+.category-filter-trigger {
+  display: inline-flex;
+  align-items: center;
+  min-height: 36px;
+  padding: 8px 12px;
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-sm);
+  background: var(--bg-surface);
+  color: var(--text-primary);
+  font-size: var(--font-sm);
+  cursor: pointer;
+  transition:
+    border-color var(--duration-fast) var(--ease-out),
+    background var(--duration-fast) var(--ease-out),
+    color var(--duration-fast) var(--ease-out);
+}
+
+.category-filter-trigger:hover {
+  border-color: var(--border-strong);
+  background: var(--bg-hover);
+}
+
+.category-filter-trigger:focus-visible,
+.category-filter-clear:focus-visible {
+  outline: none;
+  border-color: rgba(153, 0, 17, 0.45);
+}
+
+.category-filter.open .category-filter-trigger {
+  border-color: rgba(153, 0, 17, 0.42);
+  background: rgba(153, 0, 17, 0.12);
+}
+
+.category-filter-menu {
+  position: absolute;
+  top: calc(100% + 10px);
+  right: 0;
+  width: min(320px, calc(100vw - 48px));
+  padding: var(--sp-3);
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-md);
+  background: rgba(20, 20, 24, 0.98);
+  box-shadow: var(--shadow-lg);
+  z-index: 20;
+}
+
+.category-filter-menu-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--sp-3);
+  margin-bottom: var(--sp-3);
+}
+
+.category-filter-menu-title {
+  font-size: var(--font-sm);
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.category-filter-clear {
+  padding: 6px 8px;
+  border: 1px solid transparent;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--text-secondary);
+  font-size: var(--font-xs);
+  cursor: pointer;
+  transition:
+    border-color var(--duration-fast) var(--ease-out),
+    background var(--duration-fast) var(--ease-out),
+    color var(--duration-fast) var(--ease-out);
+}
+
+.category-filter-clear:hover:not(:disabled) {
+  border-color: var(--border-default);
+  background: rgba(255, 255, 255, 0.03);
+  color: var(--text-primary);
+}
+
+.category-filter-clear:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.category-filter-options {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  max-height: 280px;
+  overflow-y: auto;
+}
+
+.category-filter-option {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 10px;
+  border-radius: var(--radius-sm);
+  color: var(--text-secondary);
+  cursor: pointer;
+  transition:
+    background var(--duration-fast) var(--ease-out),
+    color var(--duration-fast) var(--ease-out);
+}
+
+.category-filter-option:hover {
+  background: rgba(255, 255, 255, 0.04);
+  color: var(--text-primary);
+}
+
+.category-filter-option input {
+  margin: 0;
+  accent-color: var(--accent-primary);
+}
+
+.category-filter-option-label {
+  min-width: 0;
+}
+
+.category-filter-option-count {
+  color: var(--text-muted);
+  font-size: var(--font-xs);
+}
+
+@media (max-width: 960px) {
+  .topbar {
+    flex-wrap: wrap;
+  }
+
+  .search-box {
+    width: 100%;
+    max-width: none;
+  }
+
+  .stats-bar {
+    align-items: stretch;
+    flex-wrap: wrap;
+  }
+
+  .stats-bar-actions {
+    width: 100%;
+    justify-content: space-between;
+  }
 }
 
 @keyframes topbar-refresh-spin {

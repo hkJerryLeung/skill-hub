@@ -16,11 +16,6 @@ import './Sidebar.css';
 export type AgentFilter = "all" | "Claude Code" | "Antigravity" | "Codex" | "Shared Library";
 export type DiscoverView = "huggingface" | "skills.sh" | "skillsmp.com" | "Install via GitHub";
 export type SidebarItem = AgentFilter | DiscoverView | "settings";
-export interface SharedLibraryCategoryItem {
-  slug: string;
-  label: string;
-  count: number;
-}
 
 const AGENTS: { key: AgentFilter; label: string; Icon: React.FC<any> }[] = [
   { key: "all", label: "All Skills", Icon: AllSkillsIcon },
@@ -40,9 +35,6 @@ const DISCOVER_ITEMS: { key: DiscoverView; label: string; Icon: React.FC<any> }[
 interface SidebarProps {
   activeItem: SidebarItem;
   setFilter: (f: AgentFilter) => void;
-  activeSharedCategory: string | null;
-  sharedCategories: SharedLibraryCategoryItem[];
-  onOpenSharedCategory: (slug: string) => void;
   onOpenDiscover: (view: DiscoverView) => void;
   onOpenSettings: () => void;
   onAgentContextMenu: (event: React.MouseEvent, agent: AgentFilter) => void;
@@ -58,9 +50,6 @@ interface SidebarProps {
 export function Sidebar({
   activeItem,
   setFilter,
-  activeSharedCategory,
-  sharedCategories,
-  onOpenSharedCategory,
   onOpenDiscover,
   onOpenSettings,
   onAgentContextMenu,
@@ -120,11 +109,7 @@ export function Sidebar({
             <div
               key={a.key}
               data-agent-key={a.key}
-              className={`sidebar-item ${
-                activeItem === a.key && (a.key !== "Shared Library" || activeSharedCategory === null)
-                  ? "active"
-                  : ""
-              } ${
+              className={`sidebar-item ${activeItem === a.key ? "active" : ""} ${
                 dragOverTarget === a.key ? "drag-over" : ""
               }`}
               onClick={() => setFilter(a.key)}
@@ -137,28 +122,6 @@ export function Sidebar({
               <span className="badge">{countByAgent(a.key)}</span>
             </div>
           ))}
-          {activeItem === "Shared Library" && (
-            <div className="sidebar-subtree">
-              {sharedCategories.map((category) => {
-                const categoryKey = `shared-category:${category.slug}`;
-                return (
-                  <button
-                    key={category.slug}
-                    type="button"
-                    data-agent-key={categoryKey}
-                    className={`sidebar-item sidebar-item-subtle ${
-                      activeSharedCategory === category.slug ? "active" : ""
-                    } ${dragOverTarget === categoryKey ? "drag-over" : ""}`}
-                    onClick={() => onOpenSharedCategory(category.slug)}
-                  >
-                    <span className="icon" />
-                    {category.label}
-                    <span className="badge">{category.count}</span>
-                  </button>
-                );
-              })}
-            </div>
-          )}
         </div>
 
         <div className="sidebar-section">

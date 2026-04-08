@@ -109,17 +109,31 @@ assert.deepStrictEqual(presentedShared.statusCounts, {
   local: 0,
   updates: 0,
 });
+assert.deepStrictEqual(
+  presentedShared.sharedCategoryGroups.map((group) => [group.slug, group.skills.map((skill) => skill.name)]),
+  [["security-systems", ["007"]]],
+);
+assert.deepStrictEqual(
+  presentedShared.sharedCategoryCounts
+    .filter((group) => group.count > 0)
+    .map((group) => [group.slug, group.count]),
+  [["security-systems", 1]],
+);
 
 const presentedSharedCategory = buildSkillPresentation(
   [sharedLocal, claudeSymlink, codexSymlink, localSkill],
   "Shared Library",
   "all",
-  "security-systems",
+  new Set(["security-systems"]),
 );
 
 assert.deepStrictEqual(
   presentedSharedCategory.skills.map((skill) => skill.name),
   ["007"],
+);
+assert.deepStrictEqual(
+  presentedSharedCategory.sharedCategoryGroups.map((group) => group.slug),
+  ["security-systems"],
 );
 
 const presentedUnlinkedShared = buildSkillPresentation([sharedLocal], "Shared Library");
@@ -127,6 +141,10 @@ const presentedUnlinkedShared = buildSkillPresentation([sharedLocal], "Shared Li
 assert.deepStrictEqual(
   presentedUnlinkedShared.skills.map((skill) => [skill.name, skill.agent, skill.is_symlink]),
   [["007", "Shared Library", false]],
+);
+assert.deepStrictEqual(
+  presentedUnlinkedShared.sharedCategoryGroups.map((group) => [group.slug, group.skills.length]),
+  [["security-systems", 1]],
 );
 
 assert.deepStrictEqual(presentedUnlinkedShared.statusCounts, {
