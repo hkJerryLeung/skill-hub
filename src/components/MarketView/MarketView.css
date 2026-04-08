@@ -1,0 +1,386 @@
+.market-view {
+  flex: 1;
+  overflow-y: auto;
+  padding: var(--sp-6) var(--sp-8) var(--sp-8);
+}
+
+.market-hero {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--sp-6);
+  margin-bottom: var(--sp-6);
+}
+
+.market-hero-copy {
+  max-width: min(760px, 100%);
+}
+
+.market-kicker {
+  font-size: var(--font-xs);
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--accent-secondary);
+  margin-bottom: var(--sp-2);
+}
+
+.market-hero h2 {
+  font-size: var(--font-2xl);
+  margin-bottom: var(--sp-3);
+}
+
+.market-hero p {
+  color: var(--text-secondary);
+  line-height: 1.6;
+  max-width: 64ch;
+}
+
+.market-hero-actions,
+.market-toolbar,
+.market-callout-actions,
+.market-card-actions {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-3);
+}
+
+.market-hero-actions {
+  flex-shrink: 0;
+  justify-content: flex-end;
+  align-self: flex-start;
+}
+
+.market-toolbar {
+  margin-bottom: var(--sp-5);
+}
+
+.market-provenance-banner {
+  margin-bottom: var(--sp-5);
+}
+
+.market-target-picker,
+.github-field {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-width: 220px;
+}
+
+.market-target-picker span,
+.github-field span {
+  font-size: var(--font-xs);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+}
+
+.market-target-picker select,
+.github-field input,
+.github-field select {
+  width: 100%;
+  padding: 10px 12px;
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-md);
+  background: var(--bg-surface);
+  color: var(--text-primary);
+  font: inherit;
+  outline: none;
+}
+
+.market-target-picker select:focus,
+.github-field input:focus,
+.github-field select:focus {
+  border-color: var(--accent-primary);
+}
+
+.market-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 14px;
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-md);
+  background: var(--bg-surface);
+  color: var(--text-primary);
+  font: inherit;
+  cursor: pointer;
+  transition:
+    border-color var(--duration-fast) var(--ease-out),
+    background var(--duration-fast) var(--ease-out),
+    color var(--duration-fast) var(--ease-out);
+}
+
+.market-btn:hover:not(:disabled) {
+  border-color: var(--border-strong);
+  background: var(--bg-hover);
+}
+
+.market-btn.primary {
+  border-color: rgba(153, 0, 17, 0.38);
+  background: rgba(153, 0, 17, 0.18);
+}
+
+.market-btn.primary:hover:not(:disabled) {
+  border-color: var(--accent-primary);
+  background: rgba(153, 0, 17, 0.26);
+}
+
+.market-btn:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.market-btn .btn-icon {
+  flex-shrink: 0;
+}
+
+.market-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
+  gap: var(--sp-4);
+}
+
+.market-card,
+.market-callout-card {
+  background: var(--bg-surface);
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-lg);
+  padding: var(--sp-5);
+}
+
+.market-card {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-4);
+  min-height: 100%;
+}
+
+.market-card-content {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  gap: var(--sp-4);
+}
+
+.market-card-eyebrow {
+  font-size: var(--font-xs);
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--accent-secondary);
+  margin-bottom: 6px;
+}
+
+.market-card-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--sp-3);
+}
+
+.market-card-title-group {
+  min-width: 0;
+}
+
+.market-card-header h3 {
+  font-size: var(--font-lg);
+  margin-bottom: 6px;
+  overflow-wrap: anywhere;
+}
+
+.market-card-source {
+  font-size: var(--font-sm);
+  color: var(--text-muted);
+  word-break: break-word;
+}
+
+.market-card-badge {
+  flex-shrink: 0;
+  align-self: flex-start;
+  padding: 4px 8px;
+  border-radius: var(--radius-full);
+  border: 1px solid rgba(253, 203, 110, 0.32);
+  background: rgba(253, 203, 110, 0.12);
+  color: var(--accent-warning);
+  font-size: var(--font-xs);
+  font-weight: 600;
+}
+
+.market-card-body {
+  color: var(--text-secondary);
+  line-height: 1.55;
+  display: -webkit-box;
+  overflow: hidden;
+  min-height: calc(1.55em * 4);
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 4;
+  line-clamp: 4;
+}
+
+.market-card-meta {
+  display: grid;
+  gap: 10px;
+  padding: 12px;
+  border-radius: var(--radius-md);
+  border: 1px solid var(--border-subtle);
+  background: color-mix(in srgb, var(--bg-surface) 88%, var(--bg-hover) 12%);
+}
+
+.market-card-meta-row {
+  display: grid;
+  grid-template-columns: minmax(72px, 88px) 1fr;
+  gap: 12px;
+  align-items: start;
+}
+
+.market-card-meta-row span,
+.market-card-command span {
+  font-size: var(--font-xs);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+}
+
+.market-card-meta-row strong,
+.market-card-meta-row code {
+  min-width: 0;
+  font-size: var(--font-sm);
+  color: var(--text-primary);
+  word-break: break-word;
+}
+
+.market-link-btn {
+  justify-self: start;
+  min-width: 0;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--accent-primary);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+  word-break: break-word;
+}
+
+.market-link-btn:hover {
+  text-decoration: underline;
+}
+
+.market-card-command {
+  display: grid;
+  gap: 8px;
+}
+
+.market-card-command code {
+  display: block;
+  padding: 10px 12px;
+  border-radius: var(--radius-md);
+  border: 1px solid var(--border-subtle);
+  background: color-mix(in srgb, var(--bg-surface) 90%, var(--bg-hover) 10%);
+  color: var(--text-primary);
+  font-size: var(--font-sm);
+  line-height: 1.5;
+  word-break: break-word;
+  white-space: normal;
+}
+
+.market-card-footnote,
+.market-provenance-note {
+  padding: 12px 14px;
+  border-radius: var(--radius-md);
+  border: 1px solid rgba(153, 0, 17, 0.18);
+  background: rgba(153, 0, 17, 0.08);
+  color: var(--text-secondary);
+  font-size: var(--font-sm);
+  line-height: 1.55;
+}
+
+.market-card-footnote code,
+.market-provenance-note code {
+  font-size: 0.95em;
+  color: var(--text-primary);
+}
+
+.market-card-actions {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  margin-top: auto;
+}
+
+.market-card-actions .market-btn {
+  width: 100%;
+  min-height: 60px;
+  justify-content: center;
+  text-align: center;
+  white-space: normal;
+}
+
+.market-callout {
+  display: flex;
+}
+
+.market-callout-card {
+  max-width: 760px;
+}
+
+.market-callout-card h3 {
+  font-size: var(--font-xl);
+  margin-bottom: var(--sp-3);
+}
+
+.market-callout-card p {
+  color: var(--text-secondary);
+  line-height: 1.6;
+  margin-bottom: var(--sp-5);
+}
+
+.github-install-card {
+  width: min(820px, 100%);
+}
+
+.github-install-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--sp-4);
+  margin-bottom: var(--sp-5);
+}
+
+.github-field.full {
+  grid-column: 1 / -1;
+}
+
+@media (max-width: 960px) {
+  .market-hero {
+    flex-direction: column;
+  }
+
+  .market-hero-actions {
+    width: 100%;
+    justify-content: flex-start;
+  }
+
+  .market-hero-actions,
+  .market-toolbar,
+  .market-callout-actions {
+    flex-wrap: wrap;
+  }
+
+  .github-install-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .github-field.full {
+    grid-column: auto;
+  }
+}
+
+@media (max-width: 1200px) {
+  .market-card-actions {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 720px) {
+  .market-card-actions {
+    grid-template-columns: 1fr;
+  }
+}

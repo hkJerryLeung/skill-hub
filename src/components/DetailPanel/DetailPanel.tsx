@@ -1,11 +1,22 @@
 import './DetailPanel.css';
-import { CloseIcon, PlusIcon, TrashIcon } from '../Icons/Icons';
-import { SkillInfo } from '../SkillGrid/SkillGrid';
+import { revealItemInDir } from '@tauri-apps/plugin-opener';
+import { SkillInfo } from '../../lib/skillTypes';
+import { canAutoUpdate, formatLastChecked, getUpdateStatusLabel, getVersionLabel } from '../../lib/updatePresentation';
+import {
+  CloseIcon,
+  PlusIcon,
+  MinusIcon,
+  TrashIcon,
+  FolderOpenIcon,
+  RefreshIcon,
+  DownloadIcon,
+} from '../Icons/Icons';
 
-interface AgentTarget {
+interface AgentStatus {
   name: string;
-  path: string;
-  exists: boolean;
+  installed: boolean;
+  skillPath?: string;
+  isSymlink?: boolean;
 }
 
 interface DetailPanelProps {
@@ -13,10 +24,15 @@ interface DetailPanelProps {
   contentLoading: boolean;
   skillContent: string;
   skillFiles: string[];
-  installableTargets: AgentTarget[];
+  agentStatuses: AgentStatus[];
+  checkingUpdate: boolean;
+  updatingSkill: boolean;
   onClose: () => void;
+  onCheckUpdate: () => void;
+  onUpdateSkill: () => void;
   onInstall: (targetAgent: string) => void;
   onUninstall: () => void;
+  onUninstallFromTarget: (skillPath: string, isSymlink: boolean) => void;
 }
 
 export function DetailPanel({
@@ -24,10 +40,15 @@ export function DetailPanel({
   contentLoading,
   skillContent,
   skillFiles,
-  installableTargets,
+  agentStatuses,
+  checkingUpdate,
+  updatingSkill,
   onClose,
+  onCheckUpdate,
+  onUpdateSkill,
   onInstall,
   onUninstall,
+  onUninstallFromTarget,
 }: DetailPanelProps) {
   if (!selected) return null;
 
@@ -59,22 +80,33 @@ export function DetailPanel({
           <div className="install-section">
             <div className="detail-section-label">Install to Agent</div>
             <div className="install-targets">
-              {installableTargets.length > 0 ? (
-                installableTargets.map((t) => (
+              {agentStatuses.length > 0 ? (
+                agentStatuses.map((t) => (
                   <button
                     key={t.name}
-                    className="install-btn"
-                    onClick={() => onInstall(t.name)}
+                    className={`install-btn ${t.installed ? 'installed' : ''}`}
+                    onClick={() => {
+                      if (t.installed && t.skillPath) {
+                        onUninstallFromTarget(t.skillPath, !!t.isSymlink);
+                      } else {
+                        onInstall(t.name);
+                      }
+                    }}
                   >
                     <span>
-                      <PlusIcon size={14} className="btn-icon" /> {t.name}
+                      {t.installed ? (
+                        <MinusIcon size={14} className="btn-icon" />
+                      ) : (
+                        <PlusIcon size={14} className="btn-icon" />
+                      )}
+                      {t.name}
                     </span>
-                    <span className="method">symlink</span>
+                    <span className="method">{t.installed ? 'INSTALLED' : 'ADD'}</span>
                   </button>
                 ))
               ) : (
                 <div className="detail-section-value" style={{ color: "var(--text-muted)" }}>
-                  Already installed in all agents
+                  No available agents
                 </div>
               )}
             </div>
@@ -89,8 +121,57 @@ export function DetailPanel({
               </div>
               <div className="detail-meta-item">
                 <div className="label">Type</div>
-                <div className="value">{selected.is_symlink ? "Symlink" : "Local"}</div>
+                <div className="value">{selected.is_symlink ? "SYMLINK" : "LOCAL"}</div>
               </div>
+              <div className="detail-meta-item">
+                <div className="label">Version</div>
+                <div className="value">{getVersionLabel(selected)}</div>
+              </div>
+              <div className="detail-meta-item">
+                <div className="label">Update Status</div>
+                <div className="value">
+                  {getUpdateStatusLabel(selected.update_status, selected.update_capability) ?? "Not Checked"}
+                </div>
+              </div>
+              <div className="detail-meta-item">
+                <div className="label">Upstream Version</div>
+                <div className="value">{selected.upstream_version ?? "Unknown"}</div>
+              </div>
+              <div className="detail-meta-item">
+                <div className="label">Last Checked</div>
+                <div className="value">{formatLastChecked(selected.last_checked_at)}</div>
+              </div>
+            </div>
+          </div>
+
+          <div className="detail-section">
+            <div className="detail-section-header-flex">
+              <div className="detail-section-label">Updates</div>
+            </div>
+            <div className="detail-action-row">
+              <button
+                className="detail-action-btn"
+                onClick={onCheckUpdate}
+                disabled={checkingUpdate || updatingSkill}
+              >
+                <RefreshIcon size={14} className="btn-icon" />
+                {checkingUpdate ? "Checking..." : "Check Update"}
+              </button>
+              <button
+                className="detail-action-btn primary"
+                onClick={onUpdateSkill}
+                disabled={!canAutoUpdate(selected) || checkingUpdate || updatingSkill}
+              >
+                <DownloadIcon size={14} className="btn-icon" />
+                {updatingSkill ? "Updating..." : "Update Skill"}
+              </button>
+            </div>
+            <div className="detail-help-text">
+              {selected.update_capability === "github"
+                ? "GitHub-backed skills can be updated automatically. A backup is created before files are overwritten."
+                : selected.update_capability === "external"
+                  ? "External sources support version hints only. Update this skill manually from its source."
+                  : "This skill does not expose an auto-update source."}
             </div>
           </div>
 
@@ -119,7 +200,27 @@ export function DetailPanel({
           </div>
 
           <div className="detail-section">
-            <div className="detail-section-label">Path</div>
+            <div className="detail-section-label">Source</div>
+            <div className="detail-path">{selected.source ?? "No source metadata"}</div>
+          </div>
+
+          <div className="detail-section">
+            <div className="detail-section-header-flex">
+              <div className="detail-section-label">Path</div>
+              <button 
+                className="path-open-btn" 
+                onClick={async () => {
+                  try {
+                    await revealItemInDir(selected.path);
+                  } catch (e) {
+                    console.error("Failed to reveal path:", e);
+                  }
+                }}
+                title="Reveal in Finder"
+              >
+                <FolderOpenIcon size={14} /> Reveal
+              </button>
+            </div>
             <div className="detail-path">{selected.path}</div>
           </div>
 

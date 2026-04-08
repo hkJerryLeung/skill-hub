@@ -74,19 +74,67 @@
   margin-bottom: 14px;
 }
 
-.skill-card-footer {
+.skill-card-meta-row {
   display: flex;
   align-items: center;
+  justify-content: flex-end;
+  gap: var(--sp-2);
+  margin-bottom: 14px;
+}
+
+.skill-card-version,
+.skill-card-update {
+  font-size: var(--font-xs);
+  padding: 4px 8px;
+  border-radius: var(--radius-full);
+  border: 1px solid var(--border-default);
+  background: var(--bg-panel);
+  color: var(--text-secondary);
+}
+
+.skill-card-version {
+  color: var(--text-primary);
+  flex-shrink: 0;
+}
+
+.skill-card-update-update_available {
+  border-color: rgba(253, 203, 110, 0.35);
+  background: rgba(253, 203, 110, 0.12);
+  color: var(--accent-warning);
+}
+
+.skill-card-update-up_to_date {
+  border-color: rgba(0, 184, 148, 0.28);
+  background: rgba(0, 184, 148, 0.12);
+  color: var(--accent-success);
+}
+
+.skill-card-update-manual_only,
+.skill-card-update-unversioned {
+  border-color: var(--border-default);
+  background: var(--bg-panel);
+  color: var(--text-muted);
+}
+
+.skill-card-update-error {
+  border-color: rgba(225, 112, 85, 0.32);
+  background: rgba(225, 112, 85, 0.12);
+  color: var(--accent-danger);
+}
+
+.skill-card-footer {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
   gap: var(--sp-2);
 }
 
-.skill-card-agent {
-  font-size: var(--font-xs);
-  padding: 3px 8px;
-  border-radius: var(--radius-md);
-  background: var(--bg-panel);
-  color: var(--text-muted);
-  border: 1px solid var(--border-default);
+.skill-card-footer-left {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
+  flex-wrap: wrap;
+  min-width: 0;
 }
 
 .skill-card-category {
@@ -96,6 +144,31 @@
   background: rgba(153, 0, 17, 0.1); 
   color: var(--accent-secondary);
   border: 1px solid rgba(255, 26, 36, 0.2);
+}
+
+.skill-card-update-button {
+  font-family: inherit;
+  cursor: pointer;
+  transition:
+    border-color var(--duration-fast) var(--ease-out),
+    background var(--duration-fast) var(--ease-out),
+    color var(--duration-fast) var(--ease-out),
+    opacity var(--duration-fast) var(--ease-out);
+}
+
+.skill-card-update-button:hover:not(:disabled) {
+  border-color: rgba(253, 203, 110, 0.52);
+  background: rgba(253, 203, 110, 0.18);
+}
+
+.skill-card-update-button:focus-visible {
+  outline: none;
+  border-color: var(--accent-primary);
+}
+
+.skill-card-update-button:disabled {
+  cursor: not-allowed;
+  opacity: 0.6;
 }
 
 /* Loading */

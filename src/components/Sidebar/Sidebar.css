@@ -5,7 +5,13 @@
   border-right: 1px solid var(--border-subtle);
   display: flex;
   flex-direction: column;
+  justify-content: space-between;
   padding: var(--sp-4) 0;
+}
+
+.sidebar-body {
+  display: flex;
+  flex-direction: column;
 }
 
 .sidebar-header {
@@ -40,18 +46,30 @@
   padding: var(--sp-2) var(--sp-2) 6px;
 }
 
+.sidebar-separator {
+  height: 1px;
+  margin: var(--sp-3) var(--sp-2) var(--sp-4);
+  background: var(--border-subtle);
+}
+
 .sidebar-item {
   display: flex;
   align-items: center;
   gap: var(--sp-2);
   padding: 9px var(--sp-3);
+  width: 100%;
   border-radius: var(--radius-sm);
+  border: 1px solid transparent;
   cursor: pointer;
   transition: background var(--duration-normal) var(--ease-out),
               color var(--duration-normal) var(--ease-out);
-  color: var(--text-secondary);
+  color: var(--text-primary);
   font-size: var(--font-md);
   font-weight: 500;
+  font-family: inherit;
+  appearance: none;
+  text-align: left;
+  background: transparent;
 }
 
 .sidebar-item:hover {
@@ -61,7 +79,7 @@
 
 .sidebar-item.active {
   background: var(--bg-active);
-  color: var(--accent-primary);
+  color: var(--text-primary);
 }
 
 .sidebar-item .icon {
@@ -69,6 +87,7 @@
   align-items: center;
   justify-content: center;
   width: 20px;
+  color: inherit;
 }
 
 .sidebar-item .badge {
@@ -88,4 +107,13 @@
 .sidebar-item.drag-over {
   background: var(--bg-hover);
   border: 1px dashed var(--accent-primary);
+}
+
+.sidebar-footer {
+  padding: 0 var(--sp-3);
+  margin-top: auto;
+}
+
+.sidebar-settings {
+  margin-top: var(--sp-3);
 }

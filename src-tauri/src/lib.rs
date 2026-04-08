@@ -1,10 +1,22 @@
 mod scanner;
+mod market;
+mod settings;
+mod update_manager;
 
 use scanner::{AgentTarget, SkillInfo};
+use settings::{AppInfo, AppSettings, BrowserSessionState};
+use market::RemoteMarketEntry;
 
 #[tauri::command]
-fn scan_skills() -> Vec<SkillInfo> {
-    scanner::scan_all_skills()
+fn scan_skills(app: tauri::AppHandle) -> Vec<SkillInfo> {
+    if let Err(error) = scanner::normalize_legacy_agent_symlinks() {
+        eprintln!("failed to normalize legacy symlinked skills: {}", error);
+    }
+    let mut skills = scanner::scan_all_skills();
+    if let Err(error) = update_manager::hydrate_skills_from_cache(&app, &mut skills) {
+        eprintln!("failed to hydrate update cache: {}", error);
+    }
+    skills
 }
 
 #[tauri::command]
@@ -23,8 +35,81 @@ fn get_agent_targets() -> Vec<AgentTarget> {
 }
 
 #[tauri::command]
-fn install_skill(source_path: String, target_agent: String, use_symlink: bool) -> Result<String, String> {
-    scanner::install_skill(&source_path, &target_agent, use_symlink)
+fn fetch_remote_market(source: String) -> Result<Vec<RemoteMarketEntry>, String> {
+    market::fetch_remote_market(&source)
+}
+
+#[tauri::command]
+fn get_app_settings() -> Result<AppSettings, String> {
+    settings::load_settings()
+}
+
+#[tauri::command]
+fn get_default_app_settings() -> AppSettings {
+    AppSettings::default()
+}
+
+#[tauri::command]
+fn save_app_settings(settings_payload: AppSettings) -> Result<AppSettings, String> {
+    settings::save_settings(&settings_payload)
+}
+
+#[tauri::command]
+fn reconcile_shared_library_targets() -> Result<String, String> {
+    scanner::reconcile_shared_library_targets()
+}
+
+#[tauri::command]
+fn get_browser_session_state() -> Result<BrowserSessionState, String> {
+    settings::load_browser_session_state()
+}
+
+#[tauri::command]
+fn save_browser_session_state(session: BrowserSessionState) -> Result<(), String> {
+    settings::save_browser_session_state(&session)
+}
+
+#[tauri::command]
+fn clear_update_cache(app: tauri::AppHandle) -> Result<String, String> {
+    update_manager::clear_update_cache(&app)
+}
+
+#[tauri::command]
+fn get_app_info(app: tauri::AppHandle) -> Result<AppInfo, String> {
+    Ok(AppInfo {
+        product_name: String::from("Skill Hub"),
+        version: env!("CARGO_PKG_VERSION").to_string(),
+        settings_path: settings::settings_path()?.to_string_lossy().to_string(),
+        session_path: settings::session_path()?.to_string_lossy().to_string(),
+        update_cache_path: update_manager::cache_path_for_app(&app)?
+            .to_string_lossy()
+            .to_string(),
+        backups_path: update_manager::backups_root_for_app(&app)?
+            .to_string_lossy()
+            .to_string(),
+    })
+}
+
+#[tauri::command]
+fn install_skill(source_path: String, target_agent: String) -> Result<String, String> {
+    scanner::install_skill(&source_path, &target_agent)
+}
+
+#[tauri::command]
+fn install_skill_from_github(
+    github_url: String,
+    target_agent: String,
+    skill_name: Option<String>,
+    market_source: Option<String>,
+    market_url: Option<String>,
+) -> Result<String, String> {
+    market::install_skill_from_github(
+        &github_url,
+        &target_agent,
+        skill_name.as_deref(),
+        market_source.as_deref(),
+        market_url.as_deref(),
+    )
 }
 
 #[tauri::command]
@@ -37,18 +122,53 @@ fn batch_migrate_skills(skills: Vec<SkillInfo>, target_agent: String) -> Result<
     scanner::batch_migrate_skills(skills, &target_agent)
 }
 
+#[tauri::command]
+fn check_skill_updates(app: tauri::AppHandle, skill_path: String) -> Result<String, String> {
+    update_manager::check_skill_updates(&app, &skill_path)
+}
+
+#[tauri::command]
+fn check_all_skill_updates(app: tauri::AppHandle) -> Result<String, String> {
+    update_manager::check_all_skill_updates(&app)
+}
+
+#[tauri::command]
+fn update_skill(app: tauri::AppHandle, skill_path: String) -> Result<String, String> {
+    update_manager::update_single_skill(&app, &skill_path)
+}
+
+#[tauri::command]
+fn update_all_skills(app: tauri::AppHandle) -> Result<String, String> {
+    update_manager::update_all_github_skills(&app)
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
+        .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_opener::init())
         .invoke_handler(tauri::generate_handler![
             scan_skills,
             read_skill_content,
             list_skill_files,
             get_agent_targets,
+            fetch_remote_market,
+            get_app_settings,
+            get_default_app_settings,
+            save_app_settings,
+            reconcile_shared_library_targets,
+            get_browser_session_state,
+            save_browser_session_state,
+            clear_update_cache,
+            get_app_info,
             install_skill,
+            install_skill_from_github,
             uninstall_skill,
-            batch_migrate_skills
+            batch_migrate_skills,
+            check_skill_updates,
+            check_all_skill_updates,
+            update_skill,
+            update_all_skills
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

@@ -1,7 +1,8 @@
 @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap');
 
 :root {
-  /* Surfaces */
+  color-scheme: dark;
+
   --bg-darkest: #060608;
   --bg-darker: #0a0a0c;
   --bg-dark: #0e0e10;
@@ -66,6 +67,40 @@
   --shadow-md: 0 4px 12px rgba(0,0,0,0.5);
   --shadow-lg: 0 8px 30px rgba(0,0,0,0.6);
   --shadow-glow: 0 0 20px rgba(255,26,36,0.3);
+}
+
+:root[data-theme="light"] {
+  color-scheme: light;
+
+  --bg-darkest: #f5f3f0;
+  --bg-darker: #f2efeb;
+  --bg-dark: #ece8e2;
+  --bg-panel: #ffffff;
+  --bg-surface: #faf7f2;
+  --bg-elevated: #f3ede5;
+  --bg-hover: #efe7dc;
+  --bg-active: #e8ddd0;
+
+  --border-subtle: rgba(60, 41, 25, 0.08);
+  --border-default: rgba(60, 41, 25, 0.14);
+  --border-strong: rgba(60, 41, 25, 0.24);
+
+  --text-primary: #1c1713;
+  --text-secondary: #5e5247;
+  --text-muted: #8c7f74;
+  --text-disabled: #b5a89b;
+
+  --shadow-sm: 0 1px 3px rgba(28, 23, 19, 0.08);
+  --shadow-md: 0 10px 24px rgba(28, 23, 19, 0.08);
+  --shadow-lg: 0 20px 48px rgba(28, 23, 19, 0.12);
+  --shadow-glow: 0 0 18px rgba(245, 0, 10, 0.18);
+}
+
+:root[data-reduced-motion="true"] * {
+  animation-duration: 0.01ms !important;
+  animation-iteration-count: 1 !important;
+  transition-duration: 0.01ms !important;
+  scroll-behavior: auto !important;
 }
 
 * {

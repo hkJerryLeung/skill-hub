@@ -1,16 +1,13 @@
 import './SkillGrid.css';
 import { SearchIcon } from '../Icons/Icons'; // We'll use SearchIcon for the empty state
-
-// We define SkillInfo interface (this is shared across files, we can export it from a types file later,
-// but for simplicity we can define it here or pass it)
-export interface SkillInfo {
-  name: string;
-  description: string;
-  path: string;
-  agent: string;
-  is_symlink: boolean;
-  category: string | null;
-}
+import { getSkillId } from '../../lib/skillIdentity';
+import {
+  canTriggerInlineUpdate,
+  getCardStatusLabel,
+  getInlineUpdateLabel,
+  getVersionLabel,
+} from '../../lib/updatePresentation';
+import { SkillInfo } from '../../lib/skillTypes';
 
 export interface SelectionBox {
   startX: number;
@@ -28,7 +25,11 @@ interface SkillGridProps {
   cardRefs: React.MutableRefObject<Map<string, HTMLDivElement>>;
   onGridMouseDown: (e: React.MouseEvent) => void;
   onCardClick: (e: React.MouseEvent, skill: SkillInfo) => void;
-  onDragStart: (e: React.DragEvent, skill: SkillInfo) => void;
+  onCardMouseDown: (e: React.MouseEvent, skill: SkillInfo) => void;
+  onCardContextMenu: (e: React.MouseEvent, skill: SkillInfo) => void;
+  updatingSkillCanonicalPath: string | null;
+  updatesLocked: boolean;
+  onInlineUpdate: (skill: SkillInfo) => void;
 }
 
 export function SkillGrid({
@@ -40,7 +41,11 @@ export function SkillGrid({
   cardRefs,
   onGridMouseDown,
   onCardClick,
-  onDragStart,
+  onCardMouseDown,
+  onCardContextMenu,
+  updatingSkillCanonicalPath,
+  updatesLocked,
+  onInlineUpdate,
 }: SkillGridProps) {
   return (
     <div className="skill-grid-container" onMouseDown={onGridMouseDown}>
@@ -64,9 +69,14 @@ export function SkillGrid({
       ) : (
         <div className="skill-grid">
           {filtered.map((skill) => {
-            const id = `${skill.agent}-${skill.name}`;
+            const id = getSkillId(skill);
             const isSelected = selectedIds.has(id);
             const isDetailActive = activeDetailId === id;
+            const updateStatusLabel = getCardStatusLabel(skill);
+            const inlineUpdateLabel = getInlineUpdateLabel(skill);
+            const inlineUpdateEnabled = canTriggerInlineUpdate(skill);
+            const isInlineUpdating =
+              updatingSkillCanonicalPath === skill.canonical_path;
 
             return (
               <div
@@ -79,8 +89,8 @@ export function SkillGrid({
                 }`}
                 key={id}
                 onClick={(e) => onCardClick(e, skill)}
-                draggable={true}
-                onDragStart={(e) => onDragStart(e, skill)}
+                onMouseDown={(e) => onCardMouseDown(e, skill)}
+                onContextMenu={(e) => onCardContextMenu(e, skill)}
               >
                 <div className="skill-card-header">
                   <span className="skill-card-name">{skill.name}</span>
@@ -89,15 +99,41 @@ export function SkillGrid({
                       skill.is_symlink ? "symlink" : "local"
                     }`}
                   >
-                    {skill.is_symlink ? "symlink" : "local"}
+                    {skill.is_symlink ? "SYMLINK" : "LOCAL"}
                   </span>
                 </div>
                 <div className="skill-card-desc">{skill.description}</div>
+                {(inlineUpdateLabel || updateStatusLabel) && (
+                  <div className="skill-card-meta-row">
+                    {inlineUpdateEnabled ? (
+                      <button
+                        type="button"
+                        className={`skill-card-update skill-card-update-button skill-card-update-${skill.update_status}`}
+                        onMouseDown={(e) => e.stopPropagation()}
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          onInlineUpdate(skill);
+                        }}
+                        disabled={updatesLocked || isInlineUpdating}
+                      >
+                        {isInlineUpdating ? "Updating..." : inlineUpdateLabel}
+                      </button>
+                    ) : updateStatusLabel ? (
+                      <span
+                        className={`skill-card-update skill-card-update-${skill.update_status}`}
+                      >
+                        {updateStatusLabel}
+                      </span>
+                    ) : null}
+                  </div>
+                )}
                 <div className="skill-card-footer">
-                  <span className="skill-card-agent">{skill.agent}</span>
-                  {skill.category && (
-                    <span className="skill-card-category">{skill.category}</span>
-                  )}
+                  <div className="skill-card-footer-left">
+                    {skill.category && (
+                      <span className="skill-card-category">{skill.category}</span>
+                    )}
+                  </div>
+                  <span className="skill-card-version">{getVersionLabel(skill)}</span>
                 </div>
               </div>
             );

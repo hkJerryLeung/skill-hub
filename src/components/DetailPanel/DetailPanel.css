@@ -85,6 +85,39 @@
   margin-bottom: var(--sp-2);
 }
 
+.detail-section-header-flex {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: var(--sp-2);
+}
+
+.detail-section-header-flex .detail-section-label {
+  margin-bottom: 0;
+}
+
+.path-open-btn {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  background: none;
+  border: none;
+  color: var(--text-secondary);
+  font-size: 11px;
+  text-transform: uppercase;
+  font-weight: 600;
+  letter-spacing: 0.05em;
+  cursor: pointer;
+  padding: 4px 8px;
+  border-radius: var(--radius-sm);
+  transition: all var(--duration-fast) var(--ease-out);
+}
+
+.path-open-btn:hover {
+  background: var(--bg-surface);
+  color: var(--text-primary);
+}
+
 .detail-section-value {
   font-size: var(--font-md);
   color: var(--text-primary);
@@ -126,6 +159,58 @@
   font-size: var(--font-md);
   font-weight: 600;
   color: var(--text-primary);
+  line-height: 1.5;
+  word-break: break-word;
+}
+
+.detail-action-row {
+  display: flex;
+  gap: var(--sp-2);
+  margin-bottom: var(--sp-2);
+}
+
+.detail-action-btn {
+  flex: 1;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 10px 14px;
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-sm);
+  background: var(--bg-surface);
+  color: var(--text-primary);
+  font-size: var(--font-md);
+  font-family: inherit;
+  cursor: pointer;
+  transition: all var(--duration-fast) var(--ease-out);
+}
+
+.detail-action-btn:hover {
+  border-color: var(--border-strong);
+  background: var(--bg-hover);
+}
+
+.detail-action-btn.primary {
+  border-color: rgba(153, 0, 17, 0.32);
+  background: rgba(153, 0, 17, 0.14);
+  color: var(--text-primary);
+}
+
+.detail-action-btn.primary:hover {
+  border-color: var(--accent-primary);
+  background: rgba(153, 0, 17, 0.22);
+}
+
+.detail-action-btn:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.detail-help-text {
+  color: var(--text-secondary);
+  font-size: var(--font-sm);
+  line-height: 1.6;
 }
 
 /* File list in detail panel */
@@ -198,6 +283,17 @@
 .install-btn:hover {
   border-color: var(--accent-primary);
   background: var(--bg-hover);
+}
+
+.install-btn.installed {
+  border-color: rgba(225, 112, 85, 0.3); /* slightly danger-tinted */
+  color: var(--text-secondary);
+}
+
+.install-btn.installed:hover {
+  border-color: var(--accent-danger);
+  background: rgba(225, 112, 85, 0.08);
+  color: var(--accent-danger);
 }
 
 .install-btn:disabled {
