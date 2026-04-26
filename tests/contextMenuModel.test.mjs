@@ -9,6 +9,7 @@ const targets = [
   { name: "Claude Code", path: "/claude", exists: true },
   { name: "Antigravity", path: "/antigravity", exists: false },
   { name: "Codex", path: "/codex", exists: true },
+  { name: "Cursor", path: "/cursor", exists: false },
 ];
 
 assert.deepStrictEqual(
@@ -16,7 +17,15 @@ assert.deepStrictEqual(
     agent: "Codex",
     targets,
   }).map((item) => item.id),
-  ["open", "reveal", "rescan", "check-updates", "update-all"],
+  ["open", "reveal", "rescan"],
+);
+
+assert.deepStrictEqual(
+  buildSidebarAgentMenuItems({
+    agent: "Cursor",
+    targets,
+  }).map((item) => item.id),
+  ["open", "reveal", "rescan"],
 );
 
 assert.deepStrictEqual(
@@ -24,7 +33,7 @@ assert.deepStrictEqual(
     agent: "Shared Library",
     targets,
   }).map((item) => item.id),
-  ["open", "reveal", "rescan", "check-updates", "update-all", "auto-categorize"],
+  ["open", "reveal", "rescan", "auto-categorize"],
 );
 
 const singleSkillMenu = buildSkillMenuItems({
@@ -35,24 +44,32 @@ const singleSkillMenu = buildSkillMenuItems({
       canonical_path: "/skills/demo",
       agent: "Codex",
       is_symlink: false,
-      update_capability: "github",
-      update_status: "update_available",
     },
   ],
-  targets,
 });
 
 assert.deepStrictEqual(
   singleSkillMenu.primary.map((item) => item.id),
-  ["open-details", "reveal", "check-update", "update-skill"],
+  ["open-details", "reveal"],
 );
 assert.deepStrictEqual(
-  singleSkillMenu.install.map((item) => item.label),
-  ["Install to Shared Library", "Install to Claude Code", "Install to Antigravity"],
+  singleSkillMenu.danger.map((item) => item.id),
+  ["remove"],
 );
 assert.deepStrictEqual(
-  singleSkillMenu.move.map((item) => item.label),
-  ["Move to Shared Library", "Move to Claude Code", "Move to Antigravity"],
+  Object.keys(singleSkillMenu).sort(),
+  ["danger", "primary"],
+  "skill menu should only expose primary and danger sections",
+);
+assert.equal(
+  "install" in singleSkillMenu,
+  false,
+  "skill menu should no longer include an install section",
+);
+assert.equal(
+  "move" in singleSkillMenu,
+  false,
+  "skill menu should no longer include a move section",
 );
 
 const batchSkillMenu = buildSkillMenuItems({
@@ -63,8 +80,6 @@ const batchSkillMenu = buildSkillMenuItems({
       canonical_path: "/skills/demo-a",
       agent: "Codex",
       is_symlink: false,
-      update_capability: "manual",
-      update_status: "unversioned",
     },
     {
       name: "demo-b",
@@ -72,17 +87,16 @@ const batchSkillMenu = buildSkillMenuItems({
       canonical_path: "/skills/demo-b",
       agent: "Codex",
       is_symlink: false,
-      update_capability: "manual",
-      update_status: "unversioned",
     },
   ],
-  targets,
 });
 
 assert.equal(batchSkillMenu.primary.length, 0);
+assert.equal(batchSkillMenu.danger.length, 0);
 assert.deepStrictEqual(
-  batchSkillMenu.move.map((item) => item.label),
-  ["Move 2 selected to Shared Library", "Move 2 selected to Claude Code", "Move 2 selected to Antigravity"],
+  Object.keys(batchSkillMenu).sort(),
+  ["danger", "primary"],
+  "batch skill menu should only expose primary and danger sections",
 );
 
 console.log("contextMenuModel test passed");

@@ -7,7 +7,6 @@ export interface AppSettings {
   shared_library_path: string;
   theme_mode: ThemeMode;
   reduce_motion: boolean;
-  auto_check_updates_on_launch: boolean;
   categorization_enabled: boolean;
   categorization_base_url: string;
   categorization_model: string;
@@ -38,8 +37,6 @@ export interface AppInfo {
   version: string;
   settings_path: string;
   session_path: string;
-  update_cache_path: string;
-  backups_path: string;
 }
 
 export const resolveDefaultInstallTarget = (
@@ -101,7 +98,6 @@ export const areSettingsEqual = (
   left.shared_library_path === right.shared_library_path &&
   left.theme_mode === right.theme_mode &&
   left.reduce_motion === right.reduce_motion &&
-  left.auto_check_updates_on_launch === right.auto_check_updates_on_launch &&
   left.categorization_enabled === right.categorization_enabled &&
   left.categorization_base_url === right.categorization_base_url &&
   left.categorization_model === right.categorization_model &&

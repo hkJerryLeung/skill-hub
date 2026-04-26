@@ -16,10 +16,6 @@ const sharedLocal = {
   category_classified_at: "2026-04-08T00:00:00Z",
   version: "1.0.0",
   source: null,
-  update_capability: "manual",
-  update_status: "up_to_date",
-  upstream_version: null,
-  last_checked_at: null,
 };
 
 const claudeSymlink = {
@@ -48,7 +44,6 @@ const localSkill = {
   category_confidence: null,
   category_classified_at: null,
   version: null,
-  update_status: "unversioned",
 };
 
 const presentedAll = buildSkillPresentation(
@@ -68,7 +63,6 @@ assert.deepStrictEqual(presentedAll.statusCounts, {
   all: 2,
   symlinked: 1,
   local: 1,
-  updates: 0,
 });
 
 const presentedSymlinked = buildSkillPresentation(
@@ -107,7 +101,6 @@ assert.deepStrictEqual(presentedShared.statusCounts, {
   all: 1,
   symlinked: 1,
   local: 0,
-  updates: 0,
 });
 assert.deepStrictEqual(
   presentedShared.sharedCategoryGroups.map((group) => [group.slug, group.skills.map((skill) => skill.name)]),
@@ -151,7 +144,6 @@ assert.deepStrictEqual(presentedUnlinkedShared.statusCounts, {
   all: 1,
   symlinked: 0,
   local: 1,
-  updates: 0,
 });
 
 const presentedAgent = buildSkillPresentation(

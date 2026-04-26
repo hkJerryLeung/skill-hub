@@ -11,8 +11,6 @@ pub struct AppInfo {
     pub version: String,
     pub settings_path: String,
     pub session_path: String,
-    pub update_cache_path: String,
-    pub backups_path: String,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, Default)]
@@ -60,8 +58,6 @@ pub enum StartupStatusFilter {
     Symlinked,
     #[serde(rename = "local")]
     Local,
-    #[serde(rename = "updates")]
-    Updates,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
@@ -70,7 +66,6 @@ pub struct AppSettings {
     pub shared_library_path: String,
     pub theme_mode: ThemeMode,
     pub reduce_motion: bool,
-    pub auto_check_updates_on_launch: bool,
     pub categorization_enabled: bool,
     pub categorization_base_url: String,
     pub categorization_model: String,
@@ -90,7 +85,6 @@ impl Default for AppSettings {
             shared_library_path: default_shared_library_path(),
             theme_mode: ThemeMode::Dark,
             reduce_motion: false,
-            auto_check_updates_on_launch: true,
             categorization_enabled: false,
             categorization_base_url: String::new(),
             categorization_model: String::new(),

@@ -1,8 +1,5 @@
 export interface TopbarRefreshStateOptions {
   loading: boolean;
-  checkingAll: boolean;
-  updatingAll: boolean;
-  updatingSkill: boolean;
 }
 
 export interface TopbarRefreshState {
@@ -13,14 +10,11 @@ export interface TopbarRefreshState {
 
 export function getTopbarRefreshState({
   loading,
-  checkingAll,
-  updatingAll,
-  updatingSkill,
 }: TopbarRefreshStateOptions): TopbarRefreshState {
   const spinning = loading;
 
   return {
-    disabled: loading || checkingAll || updatingAll || updatingSkill,
+    disabled: loading,
     spinning,
     label: spinning ? "Refreshing current page" : "Refresh current page",
   };

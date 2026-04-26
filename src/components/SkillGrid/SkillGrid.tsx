@@ -3,12 +3,7 @@ import { SearchIcon } from '../Icons/Icons'; // We'll use SearchIcon for the emp
 import { getSkillId } from '../../lib/skillIdentity';
 import type { SharedCategoryPresentation } from '../../lib/skillListPresentation';
 import { getSharedLibraryCategoryLabel } from '../../lib/sharedLibraryCategories';
-import {
-  canTriggerInlineUpdate,
-  getCardStatusLabel,
-  getInlineUpdateLabel,
-  getVersionLabel,
-} from '../../lib/updatePresentation';
+import { getVersionLabel } from '../../lib/updatePresentation';
 import { SkillInfo } from '../../lib/skillTypes';
 
 export interface SelectionBox {
@@ -33,13 +28,10 @@ interface SkillGridProps {
   onCardClick: (e: React.MouseEvent, skill: SkillInfo) => void;
   onCardMouseDown: (e: React.MouseEvent, skill: SkillInfo) => void;
   onCardContextMenu: (e: React.MouseEvent, skill: SkillInfo) => void;
-  updatingSkillCanonicalPath: string | null;
-  updatesLocked: boolean;
   onToggleSharedCategory: (slug: string) => void;
   onSharedCategoryDragOver: (e: React.DragEvent, slug: string) => void;
   onSharedCategoryDragLeave: (e: React.DragEvent, slug: string) => void;
   onSharedCategoryDrop: (e: React.DragEvent, slug: string) => void;
-  onInlineUpdate: (skill: SkillInfo) => void;
 }
 
 export function SkillGrid({
@@ -57,24 +49,16 @@ export function SkillGrid({
   onCardClick,
   onCardMouseDown,
   onCardContextMenu,
-  updatingSkillCanonicalPath,
-  updatesLocked,
   onToggleSharedCategory,
   onSharedCategoryDragOver,
   onSharedCategoryDragLeave,
   onSharedCategoryDrop,
-  onInlineUpdate,
 }: SkillGridProps) {
   const renderSkillCards = (skills: SkillInfo[]) =>
     skills.map((skill) => {
       const id = getSkillId(skill);
       const isSelected = selectedIds.has(id);
       const isDetailActive = activeDetailId === id;
-      const updateStatusLabel = getCardStatusLabel(skill);
-      const inlineUpdateLabel = getInlineUpdateLabel(skill);
-      const inlineUpdateEnabled = canTriggerInlineUpdate(skill);
-      const isInlineUpdating =
-        updatingSkillCanonicalPath === skill.canonical_path;
 
       return (
         <div
@@ -101,30 +85,6 @@ export function SkillGrid({
             </span>
           </div>
           <div className="skill-card-desc">{skill.description}</div>
-          {(inlineUpdateLabel || updateStatusLabel) && (
-            <div className="skill-card-meta-row">
-              {inlineUpdateEnabled ? (
-                <button
-                  type="button"
-                  className={`skill-card-update skill-card-update-button skill-card-update-${skill.update_status}`}
-                  onMouseDown={(e) => e.stopPropagation()}
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    onInlineUpdate(skill);
-                  }}
-                  disabled={updatesLocked || isInlineUpdating}
-                >
-                  {isInlineUpdating ? "Updating..." : inlineUpdateLabel}
-                </button>
-              ) : updateStatusLabel ? (
-                <span
-                  className={`skill-card-update skill-card-update-${skill.update_status}`}
-                >
-                  {updateStatusLabel}
-                </span>
-              ) : null}
-            </div>
-          )}
           <div className="skill-card-footer">
             <div className="skill-card-footer-left">
               {(skill.category ?? (skill.agent === "Shared Library" ? "uncategorized" : null)) && (

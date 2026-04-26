@@ -5,7 +5,14 @@ import type {
   AppInfo,
   AppSettings,
 } from "../../lib/appSettings";
-import { FolderOpenIcon, RefreshIcon, TrashIcon } from "../Icons/Icons";
+import {
+  getAppUpdateActionLabel,
+  getAppUpdateStatusText,
+  isAppUpdateActionDisabled,
+  shouldShowAppUpdateProgress,
+  type AppUpdateState,
+} from "../../lib/appUpdatePresentation";
+import { DownloadIcon, FolderOpenIcon, RefreshIcon } from "../Icons/Icons";
 
 const STARTUP_VIEW_OPTIONS: AppSettings["startup_view"][] = [
   "all",
@@ -13,13 +20,13 @@ const STARTUP_VIEW_OPTIONS: AppSettings["startup_view"][] = [
   "Claude Code",
   "Antigravity",
   "Codex",
+  "Cursor",
 ];
 
 const STATUS_FILTER_OPTIONS: AppSettings["startup_status_filter"][] = [
   "all",
   "symlinked",
   "local",
-  "updates",
 ];
 
 const THEME_OPTIONS: AppSettings["theme_mode"][] = ["system", "dark", "light"];
@@ -31,6 +38,7 @@ interface SettingsViewProps {
   saving: boolean;
   dirty: boolean;
   error: string | null;
+  appUpdateState: AppUpdateState;
   onSettingsChange: <K extends keyof AppSettings>(
     key: K,
     value: AppSettings[K],
@@ -40,8 +48,9 @@ interface SettingsViewProps {
   onCancel: () => void;
   onLoadDefaults: () => void;
   onRescan: () => void;
-  onClearUpdateCache: () => void;
   onRevealPath: (path: string) => void;
+  onCheckAppUpdate: () => void;
+  onInstallAppUpdate: () => void;
 }
 
 const formatLabel = (value: string) =>
@@ -51,11 +60,9 @@ const formatLabel = (value: string) =>
       ? "Symlinked"
       : value === "local"
         ? "Local"
-        : value === "updates"
-          ? "Updates Available"
-          : value === "system"
-            ? "System"
-            : value.charAt(0).toUpperCase() + value.slice(1);
+        : value === "system"
+          ? "System"
+          : value.charAt(0).toUpperCase() + value.slice(1);
 
 export function SettingsView({
   draftSettings,
@@ -64,17 +71,25 @@ export function SettingsView({
   saving,
   dirty,
   error,
+  appUpdateState,
   onSettingsChange,
   onBrowseSharedLibrary,
   onSave,
   onCancel,
   onLoadDefaults,
   onRescan,
-  onClearUpdateCache,
   onRevealPath,
+  onCheckAppUpdate,
+  onInstallAppUpdate,
 }: SettingsViewProps) {
   const sharedLibraryStatusFilterDisabled =
     draftSettings.startup_view === "Shared Library";
+  const appVersion = appInfo?.version ?? "0.1.0";
+  const appUpdateActionLabel = getAppUpdateActionLabel(appUpdateState);
+  const appUpdateStatusText = getAppUpdateStatusText(appUpdateState, appVersion);
+  const appUpdateDisabled = isAppUpdateActionDisabled(appUpdateState);
+  const appUpdateProgressVisible = shouldShowAppUpdateProgress(appUpdateState);
+  const appUpdateProgress = Math.max(0, Math.min(100, appUpdateState.progress));
 
   return (
     <div className="settings-view">
@@ -232,48 +247,6 @@ export function SettingsView({
                 </div>
               ))}
             </div>
-          </div>
-        </section>
-
-        <section className="settings-card">
-          <div className="settings-card-header">
-            <div>
-              <h2>Updates</h2>
-              <p>Control launch-time update behavior and clear cached results.</p>
-            </div>
-          </div>
-
-          <label className="settings-toggle">
-            <input
-              type="checkbox"
-              checked={draftSettings.auto_check_updates_on_launch}
-              onChange={(event) =>
-                onSettingsChange(
-                  "auto_check_updates_on_launch",
-                  event.target.checked,
-                )
-              }
-            />
-            <div>
-              <div className="settings-toggle-title">
-                Auto-check updates on launch
-              </div>
-              <div className="settings-toggle-help">
-                Runs the same update scan as the main toolbar automatically when
-                the app opens.
-              </div>
-            </div>
-          </label>
-
-          <div className="settings-action-row">
-            <button
-              type="button"
-              className="settings-secondary-btn"
-              onClick={onClearUpdateCache}
-            >
-              <TrashIcon size={14} />
-              Clear Update Cache
-            </button>
           </div>
         </section>
 
@@ -495,6 +468,55 @@ export function SettingsView({
           </div>
         </section>
 
+        <section className="settings-card">
+          <div className="settings-card-header">
+            <div>
+              <h2>App Update</h2>
+              <p>Public GitHub Releases.</p>
+            </div>
+          </div>
+
+          <div className={`settings-update-panel ${appUpdateState.status}`}>
+            <div className="settings-update-version-row">
+              <div>
+                <div className="settings-about-label">Current Version</div>
+                <div className="settings-update-version">v{appVersion}</div>
+              </div>
+              {appUpdateState.version && appUpdateState.status !== "idle" && (
+                <div className="settings-update-target">
+                  <span>Update</span>
+                  <strong>v{appUpdateState.version}</strong>
+                </div>
+              )}
+            </div>
+
+            <div className="settings-update-status">{appUpdateStatusText}</div>
+
+            {appUpdateProgressVisible && (
+              <div className="settings-update-progress" aria-label="Update download progress">
+                <div
+                  className="settings-update-progress-bar"
+                  style={{ width: `${appUpdateProgress}%` }}
+                />
+              </div>
+            )}
+
+            <button
+              type="button"
+              className="settings-secondary-btn settings-update-action"
+              onClick={
+                appUpdateState.status === "ready"
+                  ? onInstallAppUpdate
+                  : onCheckAppUpdate
+              }
+              disabled={appUpdateDisabled}
+            >
+              <DownloadIcon size={14} />
+              {appUpdateActionLabel}
+            </button>
+          </div>
+        </section>
+
         <section className="settings-card settings-card-wide">
           <div className="settings-card-header">
             <div>
@@ -519,8 +541,6 @@ export function SettingsView({
             {[
               ["Settings File", appInfo?.settings_path],
               ["Session File", appInfo?.session_path],
-              ["Update Cache", appInfo?.update_cache_path],
-              ["Backups", appInfo?.backups_path],
             ].map(([label, value]) => (
               <div key={label} className="settings-about-item settings-about-path">
                 <div className="settings-about-label">{label}</div>

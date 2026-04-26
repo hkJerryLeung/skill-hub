@@ -129,9 +129,22 @@ export const GlobeIcon: React.FC<IconProps> = ({ size = 16, color = "currentColo
   </svg>
 );
 
+export const SparkIcon: React.FC<IconProps> = ({ size = 16, color = "currentColor", className, ...rest }) => (
+  <svg width={size} height={size} color={color} className={className} {...baseProps} {...rest}>
+    <path d="M8 1.5 9.25 5.6 13.5 7 9.25 8.4 8 12.5 6.75 8.4 2.5 7 6.75 5.6 8 1.5Z" />
+    <path d="M12.5 10.5 13 12 14.5 12.5 13 13 12.5 14.5 12 13 10.5 12.5 12 12 12.5 10.5Z" />
+  </svg>
+);
+
 export const GithubIcon: React.FC<IconProps> = ({ size = 16, color = "currentColor", className, ...rest }) => (
   <svg width={size} height={size} color={color} className={className} viewBox="0 0 16 16" fill={color} stroke="none" {...rest}>
     <path d="M8 1C4.14 1 1 4.14 1 8c0 3.09 2 5.72 4.77 6.64.35.06.48-.15.48-.34 0-.17-.01-.72-.01-1.31-1.94.42-2.35-.82-2.35-.82-.32-.81-.78-1.02-.78-1.02-.64-.43.05-.42.05-.42.7.05 1.08.73 1.08.73.63 1.07 1.64.76 2.04.58.06-.45.24-.76.44-.94-1.55-.18-3.18-.78-3.18-3.46 0-.76.27-1.38.72-1.86-.07-.18-.31-.91.07-1.9 0 0 .59-.19 1.93.71A6.7 6.7 0 0 1 8 4.09c.6 0 1.21.08 1.77.24 1.34-.91 1.93-.71 1.93-.71.38.99.14 1.72.07 1.9.45.48.72 1.1.72 1.86 0 2.69-1.64 3.28-3.2 3.45.25.22.47.66.47 1.34 0 .96-.01 1.73-.01 1.96 0 .19.13.41.49.34A7.01 7.01 0 0 0 15 8c0-3.86-3.14-7-7-7Z" />
+  </svg>
+);
+
+export const CursorIcon: React.FC<IconProps> = ({ size = 16, color = "currentColor", className, ...rest }) => (
+  <svg width={size} height={size} color={color} className={className} viewBox="0 0 16 16" fill={color} stroke="none" {...rest}>
+    <path d="M8 1 1.5 4.75v6.5L8 15l6.5-3.75v-6.5L8 1Zm0 1.732 4.5 2.598v.79L8 9.732 3.5 7.12v-.79L8 2.732Zm-5 4.522 4.5 2.612v4.598L3 11.866V7.254Zm10 0v4.612l-4.5 2.598V9.866L13 7.254Z" />
   </svg>
 );
 

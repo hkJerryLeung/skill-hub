@@ -22,25 +22,6 @@ const LEGACY_SKILL_HUB_METADATA_FILE: &str = ".skill-hub.json";
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "snake_case")]
-pub enum UpdateCapability {
-    GitHub,
-    External,
-    Manual,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
-#[serde(rename_all = "snake_case")]
-pub enum UpdateStatus {
-    Unknown,
-    UpToDate,
-    UpdateAvailable,
-    Unversioned,
-    ManualOnly,
-    Error,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
-#[serde(rename_all = "snake_case")]
 pub enum CategoryAssignmentMode {
     Auto,
     Manual,
@@ -76,10 +57,6 @@ pub struct SkillInfo {
     pub category_classified_at: Option<String>,
     pub version: Option<String>,
     pub source: Option<String>,
-    pub update_capability: UpdateCapability,
-    pub update_status: UpdateStatus,
-    pub upstream_version: Option<String>,
-    pub last_checked_at: Option<String>,
 }
 
 #[derive(Debug, Default, Clone, PartialEq, Eq)]
@@ -208,6 +185,11 @@ fn get_agent_configs() -> Vec<AgentConfig> {
             name: "Codex",
             skills_path: home.join(".codex").join("skills"),
             recursive: true,
+        },
+        AgentConfig {
+            name: "Cursor",
+            skills_path: home.join(".cursor").join("skills"),
+            recursive: false,
         },
     ]
 }
@@ -393,22 +375,6 @@ fn fallback_description(content: &str) -> Option<String> {
     }
 
     None
-}
-
-fn classify_update_capability(source: Option<&str>) -> UpdateCapability {
-    let Some(value) = source.map(str::trim).filter(|value| !value.is_empty()) else {
-        return UpdateCapability::Manual;
-    };
-
-    if value.starts_with("https://github.com/") || value.starts_with("http://github.com/") {
-        return UpdateCapability::GitHub;
-    }
-
-    if value.starts_with("https://") || value.starts_with("http://") {
-        return UpdateCapability::External;
-    }
-
-    UpdateCapability::Manual
 }
 
 fn resolve_canonical_path(path: &Path) -> String {
@@ -770,13 +736,6 @@ fn build_skill_info(
     let category_assignment = skill_gate_metadata.category_assignment;
     let version = metadata.version;
     let source = metadata.source;
-    let update_capability = classify_update_capability(source.as_deref());
-    let update_status = match (&version, &update_capability) {
-        (None, UpdateCapability::Manual) => UpdateStatus::Unversioned,
-        (None, _) => UpdateStatus::Unknown,
-        (Some(_), UpdateCapability::Manual) => UpdateStatus::ManualOnly,
-        (Some(_), _) => UpdateStatus::Unknown,
-    };
 
     SkillInfo {
         name: metadata.name.unwrap_or(name),
@@ -799,10 +758,6 @@ fn build_skill_info(
             .and_then(|assignment| assignment.classified_at.clone()),
         version,
         source,
-        update_capability,
-        update_status,
-        upstream_version: None,
-        last_checked_at: None,
     }
 }
 
@@ -1030,6 +985,14 @@ fn get_shared_library_root() -> Result<PathBuf, String> {
 }
 
 fn is_path_in_shared_library(path: &Path, shared_root: &Path) -> bool {
+    // Check using raw paths first (handles symlinks inside the shared library
+    // that point to external locations — canonicalization would resolve through
+    // the symlink, making the path appear outside the library).
+    if path.starts_with(shared_root) {
+        return true;
+    }
+
+    // Fall back to canonical comparison for cases where either side needs resolution
     let canonical_path = fs::canonicalize(path).unwrap_or_else(|_| path.to_path_buf());
     let canonical_shared_root =
         fs::canonicalize(shared_root).unwrap_or_else(|_| shared_root.to_path_buf());
@@ -1306,26 +1269,34 @@ fn move_shared_skill_to_agent_local(
     }
 
     let shared_root = get_shared_library_root()?;
-    let canonical_shared_path = fs::canonicalize(shared_skill_path).map_err(|e| {
-        format!(
-            "Failed to resolve shared skill '{}': {}",
-            shared_skill_path.display(),
-            e
-        )
-    })?;
 
-    if !is_path_in_shared_library(&canonical_shared_path, &shared_root) {
+    // Check if the RAW path (before symlink resolution) is inside the shared library.
+    // This is important when the shared library contains symlinks pointing to external
+    // locations — fs::canonicalize would resolve through the symlink, making the
+    // canonical path appear outside the shared library.
+    let raw_abs = if shared_skill_path.is_absolute() {
+        shared_skill_path.to_path_buf()
+    } else {
+        std::env::current_dir()
+            .map_err(|e| format!("Failed to resolve current directory: {}", e))?
+            .join(shared_skill_path)
+    };
+    if !is_path_in_shared_library(&raw_abs, &shared_root) {
         return Err(format!(
             "Skill '{}' is not stored in Shared Library",
             shared_skill_path.display()
         ));
     }
 
-    let skill_name = canonical_shared_path
+    let skill_name = shared_skill_path
         .file_name()
         .ok_or("Invalid shared skill path")?
         .to_string_lossy()
         .to_string();
+
+    // Resolve through symlinks for the actual move operation
+    let resolved_source =
+        fs::canonicalize(shared_skill_path).unwrap_or_else(|_| shared_skill_path.to_path_buf());
 
     if !target.skills_path.exists() {
         fs::create_dir_all(&target.skills_path)
@@ -1333,7 +1304,7 @@ fn move_shared_skill_to_agent_local(
     }
 
     let dest_path = target.skills_path.join(&skill_name);
-    let shared_canonical = canonical_shared_path.to_string_lossy().to_string();
+    let shared_canonical = resolved_source.to_string_lossy().to_string();
     let linked_paths = scan_all_skills_raw()
         .into_iter()
         .filter(|skill| skill.is_symlink && skill.canonical_path == shared_canonical)
@@ -1343,7 +1314,7 @@ fn move_shared_skill_to_agent_local(
     if dest_path.exists() || dest_path.is_symlink() {
         let is_shared_link = dest_path.is_symlink()
             && fs::canonicalize(&dest_path)
-                .map(|path| path == canonical_shared_path)
+                .map(|path| path == resolved_source)
                 .unwrap_or(false);
 
         if is_shared_link {
@@ -1362,15 +1333,37 @@ fn move_shared_skill_to_agent_local(
         }
     }
 
-    if let Err(rename_err) = fs::rename(&canonical_shared_path, &dest_path) {
-        copy_dir_recursive(&canonical_shared_path, &dest_path).map_err(|copy_err| {
+    // If the source in SharedSkills is itself a symlink, remove it and copy
+    // the resolved content to the destination (making it a true local copy).
+    if shared_skill_path.is_symlink() {
+        // Copy resolved content to destination
+        if resolved_source.is_dir() {
+            copy_dir_recursive(&resolved_source, &dest_path)
+                .map_err(|e| format!("Failed to copy shared skill to {}: {}", target_agent, e))?;
+        } else {
+            fs::copy(&resolved_source, &dest_path)
+                .map_err(|e| format!("Failed to copy shared skill to {}: {}", target_agent, e))?;
+        }
+        // Remove the symlink from shared library
+        fs::remove_file(shared_skill_path).map_err(|e| {
             format!(
-                "Failed to move shared skill: {}; fallback copy failed: {}",
-                rename_err, copy_err
+                "Failed to remove shared symlink '{}': {}",
+                shared_skill_path.display(),
+                e
             )
         })?;
-        fs::remove_dir_all(&canonical_shared_path)
-            .map_err(|e| format!("Failed to remove shared source after copy: {}", e))?;
+    } else {
+        // Source is a real directory — move it
+        if let Err(rename_err) = fs::rename(shared_skill_path, &dest_path) {
+            copy_dir_recursive(shared_skill_path, &dest_path).map_err(|copy_err| {
+                format!(
+                    "Failed to move shared skill: {}; fallback copy failed: {}",
+                    rename_err, copy_err
+                )
+            })?;
+            fs::remove_dir_all(shared_skill_path)
+                .map_err(|e| format!("Failed to remove shared source after copy: {}", e))?;
+        }
     }
 
     for linked_path in linked_paths {
@@ -1390,7 +1383,7 @@ fn move_shared_skill_to_agent_local(
         }
     }
 
-    remove_empty_shared_parent_dir(&canonical_shared_path, &shared_root);
+    remove_empty_shared_parent_dir(shared_skill_path, &shared_root);
 
     Ok(format!(
         "Moved '{}' from Shared Library to {} as local",
@@ -1859,10 +1852,12 @@ pub fn uninstall_skill(skill_path: &str) -> Result<String, String> {
 /// Batch migrate skills
 pub fn batch_migrate_skills(skills: Vec<SkillInfo>, target_agent: &str) -> Result<String, String> {
     let mut success_count = 0;
+    let mut errors: Vec<String> = Vec::new();
 
     for skill in skills {
         let source_path = Path::new(&skill.path);
         if !source_path.exists() && !source_path.is_symlink() {
+            errors.push(format!("'{}' not found", skill.name));
             continue;
         }
 
@@ -1872,12 +1867,26 @@ pub fn batch_migrate_skills(skills: Vec<SkillInfo>, target_agent: &str) -> Resul
             install_skill(&skill.path, target_agent)
         };
 
-        if result.is_ok() {
-            success_count += 1;
+        match result {
+            Ok(_) => success_count += 1,
+            Err(e) => errors.push(format!("'{}': {}", skill.name, e)),
         }
     }
 
-    Ok(format!("Migrated {} skills", success_count))
+    if success_count > 0 && errors.is_empty() {
+        Ok(format!("Migrated {} skills", success_count))
+    } else if success_count > 0 {
+        Ok(format!(
+            "Migrated {} skills ({} failed: {})",
+            success_count,
+            errors.len(),
+            errors.join("; ")
+        ))
+    } else if !errors.is_empty() {
+        Err(format!("Migration failed: {}", errors.join("; ")))
+    } else {
+        Ok(String::from("No skills to migrate"))
+    }
 }
 
 #[cfg(test)]
@@ -1952,10 +1961,6 @@ mod tests {
             category_classified_at: None,
             version: None,
             source: None,
-            update_capability: UpdateCapability::Manual,
-            update_status: UpdateStatus::Unversioned,
-            upstream_version: None,
-            last_checked_at: None,
         }
     }
 
@@ -1970,6 +1975,21 @@ mod tests {
             assert_eq!(
                 codex_target.path,
                 home.join(".codex").join("skills").to_string_lossy()
+            );
+        });
+    }
+
+    #[test]
+    fn cursor_target_points_to_user_skills_directory() {
+        with_temp_home(|home| {
+            let cursor_target = get_agent_paths()
+                .into_iter()
+                .find(|target| target.name == "Cursor")
+                .expect("missing Cursor target");
+
+            assert_eq!(
+                cursor_target.path,
+                home.join(".cursor").join("skills").to_string_lossy()
             );
         });
     }
@@ -2032,10 +2052,6 @@ mod tests {
                     category_classified_at: None,
                     version: None,
                     source: None,
-                    update_capability: UpdateCapability::Manual,
-                    update_status: UpdateStatus::Unversioned,
-                    upstream_version: None,
-                    last_checked_at: None,
                 }],
                 "Shared Library",
             )
@@ -2381,11 +2397,13 @@ mod tests {
             let claude_dir = home.join(".claude").join("skills");
             let antigravity_dir = home.join(".gemini").join("antigravity").join("skills");
             let codex_dir = home.join(".codex").join("skills");
+            let cursor_dir = home.join(".cursor").join("skills");
 
             fs::create_dir_all(&shared_dir).unwrap();
             fs::create_dir_all(&claude_dir).unwrap();
             fs::create_dir_all(&antigravity_dir).unwrap();
             fs::create_dir_all(&codex_dir).unwrap();
+            fs::create_dir_all(&cursor_dir).unwrap();
 
             let shared_skill = shared_dir.join("detach-me");
             create_skill(&shared_skill);
@@ -2393,6 +2411,7 @@ mod tests {
             symlink_dir(&shared_skill, &claude_dir.join("detach-me"));
             symlink_dir(&shared_skill, &antigravity_dir.join("detach-me"));
             symlink_dir(&shared_skill, &codex_dir.join("detach-me"));
+            symlink_dir(&shared_skill, &cursor_dir.join("detach-me"));
 
             batch_migrate_skills(
                 vec![SkillInfo {
@@ -2408,10 +2427,6 @@ mod tests {
                     category_classified_at: None,
                     version: None,
                     source: None,
-                    update_capability: UpdateCapability::Manual,
-                    update_status: UpdateStatus::Unversioned,
-                    upstream_version: None,
-                    last_checked_at: None,
                 }],
                 "Codex",
             )
@@ -2436,6 +2451,11 @@ mod tests {
                     && !antigravity_dir.join("detach-me").is_symlink(),
                 "Antigravity symlink should be removed"
             );
+            assert!(
+                !cursor_dir.join("detach-me").exists()
+                    && !cursor_dir.join("detach-me").is_symlink(),
+                "Cursor symlink should be removed"
+            );
         });
     }
 
@@ -2446,11 +2466,13 @@ mod tests {
             let claude_dir = home.join(".claude").join("skills");
             let antigravity_dir = home.join(".gemini").join("antigravity").join("skills");
             let codex_dir = home.join(".codex").join("skills");
+            let cursor_dir = home.join(".cursor").join("skills");
 
             fs::create_dir_all(&shared_dir).unwrap();
             fs::create_dir_all(&claude_dir).unwrap();
             fs::create_dir_all(&antigravity_dir).unwrap();
             fs::create_dir_all(&codex_dir).unwrap();
+            fs::create_dir_all(&cursor_dir).unwrap();
 
             let shared_skill = shared_dir.join("remove-me");
             create_skill(&shared_skill);
@@ -2458,6 +2480,7 @@ mod tests {
             symlink_dir(&shared_skill, &claude_dir.join("remove-me"));
             symlink_dir(&shared_skill, &antigravity_dir.join("remove-me"));
             symlink_dir(&shared_skill, &codex_dir.join("remove-me"));
+            symlink_dir(&shared_skill, &cursor_dir.join("remove-me"));
 
             uninstall_skill(shared_skill.to_string_lossy().as_ref()).unwrap();
 
@@ -2475,6 +2498,11 @@ mod tests {
             assert!(
                 !codex_dir.join("remove-me").exists() && !codex_dir.join("remove-me").is_symlink(),
                 "Codex link should be removed"
+            );
+            assert!(
+                !cursor_dir.join("remove-me").exists()
+                    && !cursor_dir.join("remove-me").is_symlink(),
+                "Cursor link should be removed"
             );
         });
     }
@@ -2726,23 +2754,6 @@ body"#,
                 );
             }
         });
-    }
-
-    #[test]
-    fn source_classifier_distinguishes_github_external_and_manual_sources() {
-        assert_eq!(
-            classify_update_capability(Some("https://github.com/example/skills")),
-            UpdateCapability::GitHub
-        );
-        assert_eq!(
-            classify_update_capability(Some("https://example.com/skills/demo/SKILL.md")),
-            UpdateCapability::External
-        );
-        assert_eq!(
-            classify_update_capability(Some("community")),
-            UpdateCapability::Manual
-        );
-        assert_eq!(classify_update_capability(None), UpdateCapability::Manual);
     }
 
     #[test]

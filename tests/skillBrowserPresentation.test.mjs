@@ -14,10 +14,6 @@ const sharedFindSkills = {
   category_classified_at: "2026-04-08T00:00:00Z",
   version: null,
   source: null,
-  update_capability: "manual",
-  update_status: "unversioned",
-  upstream_version: null,
-  last_checked_at: null,
 };
 
 const claudeFindSkills = {
@@ -49,8 +45,6 @@ const sharedReact = {
   category: "development-code-tools",
   version: "1.0.0",
   source: "https://github.com/vercel-labs/agent-skills/tree/main/skills/react-best-practices",
-  update_capability: "github",
-  update_status: "up_to_date",
 };
 
 const claudeReact = {
@@ -120,7 +114,6 @@ assert.deepStrictEqual(presentedShared.statusCounts, {
   all: 2,
   symlinked: 2,
   local: 0,
-  updates: 0,
 });
 
 const presentedSharedCategory = buildBrowserSkillPresentation(

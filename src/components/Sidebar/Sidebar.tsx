@@ -5,16 +5,18 @@ import {
   ClaudeIcon,
   GeminiIcon,
   OpenAIIcon,
+  CursorIcon,
   SettingsIcon,
   DownloadIcon,
   GlobeIcon,
   GithubIcon,
+  SparkIcon,
 } from '../Icons/Icons';
 import { resolveSidebarDropTargetKey } from '../../lib/dragDropState';
 import './Sidebar.css';
 
-export type AgentFilter = "all" | "Claude Code" | "Antigravity" | "Codex" | "Shared Library";
-export type DiscoverView = "huggingface" | "skills.sh" | "skillsmp.com" | "Install via GitHub";
+export type AgentFilter = "all" | "Claude Code" | "Antigravity" | "Codex" | "Cursor" | "Shared Library";
+export type DiscoverView = "AI Skill Scout" | "huggingface" | "skills.sh" | "skillsmp.com" | "Install via GitHub";
 export type SidebarItem = AgentFilter | DiscoverView | "settings";
 
 const AGENTS: { key: AgentFilter; label: string; Icon: React.FC<any> }[] = [
@@ -23,9 +25,11 @@ const AGENTS: { key: AgentFilter; label: string; Icon: React.FC<any> }[] = [
   { key: "Claude Code", label: "Claude Code", Icon: ClaudeIcon },
   { key: "Antigravity", label: "Antigravity", Icon: GeminiIcon },
   { key: "Codex", label: "Codex", Icon: OpenAIIcon },
+  { key: "Cursor", label: "Cursor", Icon: CursorIcon },
 ];
 
 const DISCOVER_ITEMS: { key: DiscoverView; label: string; Icon: React.FC<any> }[] = [
+  { key: "AI Skill Scout", label: "AI Skill Scout", Icon: SparkIcon },
   { key: "huggingface", label: "huggingface", Icon: DownloadIcon },
   { key: "skills.sh", label: "skills.sh", Icon: GlobeIcon },
   { key: "skillsmp.com", label: "skillsmp.com", Icon: GlobeIcon },
@@ -42,6 +46,7 @@ interface SidebarProps {
   onSettingsContextMenu: (event: React.MouseEvent) => void;
   countByAgent: (agent: string) => number;
   dragOverTarget: string | null;
+  dragActiveRef: React.RefObject<boolean>;
   onDragOver: (e: React.DragEvent, key: string) => void;
   onDragLeave: (e: React.DragEvent, key: string) => void;
   onDrop: (e: React.DragEvent, key: string) => void;
@@ -57,6 +62,7 @@ export function Sidebar({
   onSettingsContextMenu,
   countByAgent,
   dragOverTarget,
+  dragActiveRef,
   onDragOver,
   onDragLeave,
   onDrop,
@@ -112,7 +118,10 @@ export function Sidebar({
               className={`sidebar-item ${activeItem === a.key ? "active" : ""} ${
                 dragOverTarget === a.key ? "drag-over" : ""
               }`}
-              onClick={() => setFilter(a.key)}
+              onClick={() => {
+                if (dragActiveRef.current) return;
+                setFilter(a.key);
+              }}
               onContextMenu={(event) => onAgentContextMenu(event, a.key)}
             >
               <span className="icon">

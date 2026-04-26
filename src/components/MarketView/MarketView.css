@@ -76,7 +76,8 @@
 
 .market-target-picker select,
 .github-field input,
-.github-field select {
+.github-field select,
+.github-field textarea {
   width: 100%;
   padding: 10px 12px;
   border: 1px solid var(--border-default);
@@ -89,8 +90,15 @@
 
 .market-target-picker select:focus,
 .github-field input:focus,
-.github-field select:focus {
+.github-field select:focus,
+.github-field textarea:focus {
   border-color: var(--accent-primary);
+}
+
+.github-field textarea {
+  min-height: 128px;
+  resize: vertical;
+  line-height: 1.55;
 }
 
 .market-btn {
@@ -337,7 +345,8 @@
   width: min(820px, 100%);
 }
 
-.github-install-grid {
+.github-install-grid,
+.ai-scout-grid {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: var(--sp-4);
@@ -346,6 +355,75 @@
 
 .github-field.full {
   grid-column: 1 / -1;
+}
+
+.ai-scout-callout {
+  display: block;
+}
+
+.ai-scout-card {
+  width: min(940px, 100%);
+  max-width: none;
+}
+
+.market-error-note {
+  margin-top: var(--sp-4);
+  margin-bottom: var(--sp-4);
+  padding: 12px 14px;
+  border-radius: var(--radius-md);
+  border: 1px solid var(--accent-primary);
+  color: var(--text-primary);
+  background: color-mix(in srgb, var(--accent-primary) 14%, var(--bg-surface));
+  font-size: var(--font-sm);
+  line-height: 1.5;
+}
+
+.ai-scout-response {
+  display: grid;
+  gap: var(--sp-4);
+  margin-top: var(--sp-5);
+}
+
+.ai-scout-message {
+  padding: var(--sp-4);
+  border-radius: var(--radius-md);
+  border: 1px solid var(--border-subtle);
+  background: color-mix(in srgb, var(--bg-surface) 82%, var(--bg-hover));
+  color: var(--text-secondary);
+  line-height: 1.6;
+}
+
+.ai-scout-recommendations {
+  display: grid;
+  gap: var(--sp-4);
+}
+
+.ai-scout-recommendation {
+  display: grid;
+  gap: var(--sp-4);
+  padding: var(--sp-5);
+  border-radius: var(--radius-lg);
+  border: 1px solid var(--border-default);
+  background: var(--bg-panel);
+}
+
+.ai-scout-recommendation h3 {
+  font-size: var(--font-lg);
+  overflow-wrap: anywhere;
+}
+
+.ai-scout-recommendation p {
+  margin: 0;
+  color: var(--text-secondary);
+  line-height: 1.55;
+}
+
+.market-card-actions.single {
+  grid-template-columns: minmax(220px, max-content);
+}
+
+.empty-state.compact {
+  min-height: 220px;
 }
 
 @media (max-width: 960px) {
@@ -364,7 +442,8 @@
     flex-wrap: wrap;
   }
 
-  .github-install-grid {
+  .github-install-grid,
+  .ai-scout-grid {
     grid-template-columns: 1fr;
   }
 

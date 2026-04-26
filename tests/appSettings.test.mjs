@@ -10,14 +10,13 @@ const baseSettings = {
   shared_library_path: "/Users/example/SharedSkills",
   theme_mode: "system",
   reduce_motion: false,
-  auto_check_updates_on_launch: true,
   categorization_enabled: false,
   categorization_base_url: "",
   categorization_model: "",
   categorization_api_key: "",
   categorization_confidence_threshold: 0.7,
   startup_view: "Codex",
-  startup_status_filter: "updates",
+  startup_status_filter: "local",
   restore_last_session: false,
   confirm_before_uninstall: true,
   confirm_before_batch_migrate: true,
@@ -33,7 +32,7 @@ assert.equal(
 assert.deepStrictEqual(resolveInitialBrowserState(baseSettings, null), {
   filter: "Codex",
   search: "",
-  statusFilter: "updates",
+  statusFilter: "local",
 });
 
 assert.deepStrictEqual(

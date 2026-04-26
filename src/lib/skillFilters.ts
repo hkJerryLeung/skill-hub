@@ -1,12 +1,11 @@
 import type { SkillInfo } from "./skillTypes";
 
-export type StatusFilter = "all" | "symlinked" | "local" | "updates";
+export type StatusFilter = "all" | "symlinked" | "local";
 
 export interface StatusCounts {
   all: number;
   symlinked: number;
   local: number;
-  updates: number;
 }
 
 export function toggleStatusFilter(
@@ -25,10 +24,6 @@ export function applyStatusFilter(
       return skills.filter((skill) => skill.is_symlink);
     case "local":
       return skills.filter((skill) => !skill.is_symlink);
-    case "updates":
-      return skills.filter(
-        (skill) => skill.update_status === "update_available",
-      );
     default:
       return skills;
   }
@@ -39,8 +34,5 @@ export function getStatusCounts(skills: SkillInfo[]): StatusCounts {
     all: skills.length,
     symlinked: skills.filter((skill) => skill.is_symlink).length,
     local: skills.filter((skill) => !skill.is_symlink).length,
-    updates: skills.filter(
-      (skill) => skill.update_status === "update_available",
-    ).length,
   };
 }

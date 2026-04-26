@@ -1,7 +1,12 @@
 import { openUrl } from "@tauri-apps/plugin-opener";
-import { SearchIcon, RefreshIcon, DownloadIcon, GithubIcon, GlobeIcon } from "../Icons/Icons";
+import { SearchIcon, RefreshIcon, DownloadIcon, GithubIcon, GlobeIcon, SparkIcon } from "../Icons/Icons";
 import { DiscoverView } from "../Sidebar/Sidebar";
 import { RemoteMarketEntry } from "../../lib/marketTypes";
+import type {
+  LocalSkillModel,
+  SkillScoutRecommendation,
+  SkillScoutResponse,
+} from "../../lib/localScoutTypes";
 import "./MarketView.css";
 
 interface InstallTargetOption {
@@ -28,6 +33,25 @@ interface MarketViewProps {
   setGithubInstallSkillName: (value: string) => void;
   onInstallGithub: () => void;
   githubInstalling: boolean;
+  localScoutModels: LocalSkillModel[];
+  localScoutModelId: string;
+  onSelectLocalScoutModel: (id: string) => void;
+  localScoutDetecting: boolean;
+  localScoutProvider: LocalSkillModel["provider"];
+  setLocalScoutProvider: (value: LocalSkillModel["provider"]) => void;
+  localScoutBaseUrl: string;
+  setLocalScoutBaseUrl: (value: string) => void;
+  localScoutModel: string;
+  setLocalScoutModel: (value: string) => void;
+  localScoutPrompt: string;
+  setLocalScoutPrompt: (value: string) => void;
+  localScoutResponse: SkillScoutResponse | null;
+  localScoutLoading: boolean;
+  localScoutError: string | null;
+  onRefreshLocalScoutModels: () => void;
+  onAskLocalScout: () => void;
+  onInstallLocalScoutRecommendation: (recommendation: SkillScoutRecommendation) => void;
+  installingLocalScoutKey: string | null;
 }
 
 const isListView = (view: DiscoverView): view is "huggingface" | "skills.sh" =>
@@ -41,6 +65,13 @@ const formatInstalls = (value: number | null) => {
 };
 
 const getEntryKey = (entry: RemoteMarketEntry) => `${entry.repo}:${entry.skill_id}`;
+const getRecommendationKey = (recommendation: SkillScoutRecommendation) =>
+  `${recommendation.github_url}:${recommendation.skill_name ?? ""}`;
+
+const formatConfidence = (value: number | null) => {
+  if (value === null) return "Confidence not stated";
+  return `${Math.round(value * 100)}% confidence`;
+};
 
 const openExternal = async (url: string) => {
   try {
@@ -69,6 +100,25 @@ export function MarketView({
   setGithubInstallSkillName,
   onInstallGithub,
   githubInstalling,
+  localScoutModels,
+  localScoutModelId,
+  onSelectLocalScoutModel,
+  localScoutDetecting,
+  localScoutProvider,
+  setLocalScoutProvider,
+  localScoutBaseUrl,
+  setLocalScoutBaseUrl,
+  localScoutModel,
+  setLocalScoutModel,
+  localScoutPrompt,
+  setLocalScoutPrompt,
+  localScoutResponse,
+  localScoutLoading,
+  localScoutError,
+  onRefreshLocalScoutModels,
+  onAskLocalScout,
+  onInstallLocalScoutRecommendation,
+  installingLocalScoutKey,
 }: MarketViewProps) {
   const filteredEntries = entries.filter((entry) => {
     const query = search.trim().toLowerCase();
@@ -81,7 +131,9 @@ export function MarketView({
   });
 
   const title =
-    view === "huggingface"
+    view === "AI Skill Scout"
+      ? "AI Skill Scout"
+      : view === "huggingface"
       ? "huggingface"
       : view === "skills.sh"
         ? "skills.sh"
@@ -90,7 +142,9 @@ export function MarketView({
           : "Install via GitHub";
 
   const subtitle =
-    view === "huggingface"
+    view === "AI Skill Scout"
+      ? "Chat with a local model to shortlist existing GitHub skills, review the recommendation, and install the chosen skill into Shared Library."
+      : view === "huggingface"
       ? "Top Hugging Face skills ranked from the public skills.sh catalog, ready to install into your local agent targets."
       : view === "skills.sh"
         ? "Browse the public skills.sh leaderboard and install the hottest skills straight from GitHub."
@@ -110,7 +164,19 @@ export function MarketView({
           <p>{subtitle}</p>
         </div>
 
-        {isListView(view) && (
+        {view === "AI Skill Scout" ? (
+          <div className="market-hero-actions">
+            <button
+              type="button"
+              className="market-btn"
+              onClick={onRefreshLocalScoutModels}
+              disabled={localScoutDetecting}
+            >
+              <RefreshIcon size={14} className="btn-icon" />
+              {localScoutDetecting ? "Detecting..." : "Detect models"}
+            </button>
+          </div>
+        ) : isListView(view) && (
           <div className="market-hero-actions">
             <label className="market-target-picker">
               <span>Install to</span>
@@ -134,7 +200,156 @@ export function MarketView({
         )}
       </div>
 
-      {isListView(view) ? (
+      {view === "AI Skill Scout" ? (
+        <div className="market-callout ai-scout-callout">
+          <div className="market-callout-card ai-scout-card">
+            <div className="ai-scout-grid">
+              <label className="github-field full">
+                <span>Detected model</span>
+                <select
+                  value={localScoutModelId}
+                  onChange={(event) => onSelectLocalScoutModel(event.target.value)}
+                >
+                  <option value="">Manual configuration</option>
+                  {localScoutModels.map((model) => (
+                    <option key={model.id} value={model.id}>
+                      {model.provider_label} / {model.model}
+                    </option>
+                  ))}
+                </select>
+              </label>
+
+              <label className="github-field">
+                <span>Provider</span>
+                <select
+                  value={localScoutProvider}
+                  onChange={(event) => setLocalScoutProvider(event.target.value as LocalSkillModel["provider"])}
+                >
+                  <option value="openai_compatible">OpenAI-compatible</option>
+                  <option value="ollama">Ollama</option>
+                </select>
+              </label>
+
+              <label className="github-field">
+                <span>Base URL</span>
+                <input
+                  type="url"
+                  value={localScoutBaseUrl}
+                  onChange={(event) => setLocalScoutBaseUrl(event.target.value)}
+                  placeholder="http://localhost:1234/v1"
+                />
+              </label>
+
+              <label className="github-field full">
+                <span>Model</span>
+                <input
+                  type="text"
+                  value={localScoutModel}
+                  onChange={(event) => setLocalScoutModel(event.target.value)}
+                  placeholder="llama3.2, qwen, mistral, or your local model id"
+                />
+              </label>
+
+              <label className="github-field full">
+                <span>Request</span>
+                <textarea
+                  value={localScoutPrompt}
+                  onChange={(event) => setLocalScoutPrompt(event.target.value)}
+                  placeholder="Find me a skill for reviewing pull requests and summarising code changes"
+                  rows={5}
+                />
+              </label>
+            </div>
+
+            <div className="market-provenance-note">
+              AI Skill Scout only installs after confirmation, and every install goes to{" "}
+              <code>Shared Library</code>. The GitHub installer still validates the repository
+              contains a <code>SKILL.md</code> folder.
+            </div>
+
+            {localScoutError ? (
+              <div className="market-error-note">{localScoutError}</div>
+            ) : null}
+
+            <div className="market-callout-actions">
+              <button
+                type="button"
+                className="market-btn primary"
+                onClick={onAskLocalScout}
+                disabled={
+                  localScoutLoading ||
+                  localScoutBaseUrl.trim() === "" ||
+                  localScoutModel.trim() === "" ||
+                  localScoutPrompt.trim() === ""
+                }
+              >
+                <SparkIcon size={14} className="btn-icon" />
+                {localScoutLoading ? "Asking..." : "Ask local model"}
+              </button>
+            </div>
+
+            {localScoutResponse ? (
+              <div className="ai-scout-response">
+                <div className="ai-scout-message">{localScoutResponse.message}</div>
+
+                {localScoutResponse.recommendations.length === 0 ? (
+                  <div className="empty-state compact">
+                    <div className="icon">
+                      <SearchIcon size={32} />
+                    </div>
+                    <h3>No installable GitHub skills returned</h3>
+                    <p>Ask for a narrower workflow or paste a repository you want evaluated.</p>
+                  </div>
+                ) : (
+                  <div className="ai-scout-recommendations">
+                    {localScoutResponse.recommendations.map((recommendation) => {
+                      const key = getRecommendationKey(recommendation);
+                      const installing = installingLocalScoutKey === key;
+
+                      return (
+                        <article key={key} className="ai-scout-recommendation">
+                          <div className="market-card-eyebrow">
+                            {formatConfidence(recommendation.confidence)}
+                          </div>
+                          <h3>{recommendation.title}</h3>
+                          <p>{recommendation.reason}</p>
+                          <div className="market-card-meta">
+                            <div className="market-card-meta-row">
+                              <span>GitHub</span>
+                              <button
+                                type="button"
+                                className="market-link-btn"
+                                onClick={() => void openExternal(recommendation.github_url)}
+                              >
+                                {recommendation.github_url}
+                              </button>
+                            </div>
+                            <div className="market-card-meta-row">
+                              <span>Skill hint</span>
+                              <code>{recommendation.skill_name ?? "Auto-detect"}</code>
+                            </div>
+                          </div>
+                          <div className="market-card-actions single">
+                            <button
+                              type="button"
+                              className="market-btn primary"
+                              onClick={() => onInstallLocalScoutRecommendation(recommendation)}
+                              disabled={installing}
+                            >
+                              <DownloadIcon size={14} className="btn-icon" />
+                              {installing ? "Installing..." : "Install to Shared Library"}
+                            </button>
+                          </div>
+                        </article>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
+            ) : null}
+          </div>
+        </div>
+      ) : isListView(view) ? (
         <div className="market-provenance-note market-provenance-banner">
           Remote installs save the resolved GitHub tree plus market provenance into{" "}
           <code>SKILL.md</code> so update tracking keeps a stable upstream source.

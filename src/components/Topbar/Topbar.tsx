@@ -16,16 +16,12 @@ interface TopbarProps {
   refreshing: boolean;
   refreshDisabled: boolean;
   refreshLabel: string;
-  checkingAll: boolean;
-  updatingAll: boolean;
   autoCategorizing: boolean;
   categorizationEnabled: boolean;
   onStatusFilterChange: (filter: StatusFilter) => void;
   onToggleSharedCategory: (slug: string) => void;
   onClearSharedCategories: () => void;
   onRefresh: () => void;
-  onCheckUpdates: () => void;
-  onUpdateAll: () => void;
   onAutoCategorize: () => void;
 }
 
@@ -40,16 +36,12 @@ export function Topbar({
   refreshing,
   refreshDisabled,
   refreshLabel,
-  checkingAll,
-  updatingAll,
   autoCategorizing,
   categorizationEnabled,
   onStatusFilterChange,
   onToggleSharedCategory,
   onClearSharedCategories,
   onRefresh,
-  onCheckUpdates,
-  onUpdateAll,
   onAutoCategorize,
 }: TopbarProps) {
   const [categoryFilterOpen, setCategoryFilterOpen] = useState(false);
@@ -98,12 +90,6 @@ export function Topbar({
               {autoCategorizing ? "Categorizing..." : "Auto Categorize"}
             </button>
           )}
-          <button className="topbar-btn" onClick={onCheckUpdates} disabled={checkingAll || updatingAll}>
-            {checkingAll ? "Checking..." : "Check Updates"}
-          </button>
-          <button className="topbar-btn primary" onClick={onUpdateAll} disabled={checkingAll || updatingAll}>
-            {updatingAll ? "Updating..." : "Update All"}
-          </button>
         </div>
         <div className="search-box">
           <span className="search-icon">
@@ -144,13 +130,6 @@ export function Topbar({
               <span className="stat-value">{statusCounts.local}</span> local
             </button>
           )}
-          <button
-            type="button"
-            className={`stat-item ${statusFilter === "updates" ? "active" : ""}`}
-            onClick={() => onStatusFilterChange("updates")}
-          >
-            <span className="stat-value">{statusCounts.updates}</span> updates available
-          </button>
         </div>
         <div className="stats-bar-actions">
           {filter === "Shared Library" && (

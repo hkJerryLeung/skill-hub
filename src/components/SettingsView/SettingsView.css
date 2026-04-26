@@ -280,6 +280,90 @@
   gap: var(--sp-3);
 }
 
+.settings-update-panel {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-3);
+  padding: 12px;
+  border-radius: var(--radius-lg);
+  border: 1px solid var(--border-subtle);
+  background: var(--bg-surface);
+}
+
+.settings-update-panel.ready {
+  border-color: color-mix(in srgb, var(--accent-success) 32%, transparent);
+  background: color-mix(in srgb, var(--accent-success) 10%, var(--bg-surface));
+}
+
+.settings-update-panel.error {
+  border-color: color-mix(in srgb, var(--accent-danger) 32%, transparent);
+  background: color-mix(in srgb, var(--accent-danger) 10%, var(--bg-surface));
+}
+
+.settings-update-version-row {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--sp-3);
+}
+
+.settings-update-version {
+  color: var(--text-primary);
+  font-size: var(--font-lg);
+  font-weight: 600;
+}
+
+.settings-update-target {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 5px 8px;
+  border-radius: var(--radius-full);
+  border: 1px solid var(--border-default);
+  color: var(--text-secondary);
+  font-size: var(--font-xs);
+  white-space: nowrap;
+}
+
+.settings-update-target strong {
+  color: var(--text-primary);
+  font-weight: 600;
+}
+
+.settings-update-status {
+  min-height: 18px;
+  color: var(--text-secondary);
+  font-size: var(--font-sm);
+  line-height: 1.5;
+}
+
+.settings-update-panel.error .settings-update-status {
+  color: var(--accent-danger);
+}
+
+.settings-update-panel.ready .settings-update-status {
+  color: var(--accent-success);
+}
+
+.settings-update-progress {
+  height: 6px;
+  overflow: hidden;
+  border-radius: var(--radius-full);
+  border: 1px solid var(--border-subtle);
+  background: var(--bg-elevated);
+}
+
+.settings-update-progress-bar {
+  height: 100%;
+  border-radius: inherit;
+  background: var(--accent-primary);
+  transition: width var(--duration-normal) var(--ease-out);
+}
+
+.settings-update-action {
+  width: 100%;
+}
+
 .settings-about-grid {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));

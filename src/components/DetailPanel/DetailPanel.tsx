@@ -2,15 +2,13 @@ import './DetailPanel.css';
 import { revealItemInDir } from '@tauri-apps/plugin-opener';
 import { SkillInfo } from '../../lib/skillTypes';
 import { getSharedLibraryCategoryLabel } from '../../lib/sharedLibraryCategories';
-import { canAutoUpdate, formatLastChecked, getUpdateStatusLabel, getVersionLabel } from '../../lib/updatePresentation';
+import { getVersionLabel } from '../../lib/updatePresentation';
 import {
   CloseIcon,
   PlusIcon,
   MinusIcon,
   TrashIcon,
   FolderOpenIcon,
-  RefreshIcon,
-  DownloadIcon,
 } from '../Icons/Icons';
 
 interface AgentStatus {
@@ -26,11 +24,7 @@ interface DetailPanelProps {
   skillContent: string;
   skillFiles: string[];
   agentStatuses: AgentStatus[];
-  checkingUpdate: boolean;
-  updatingSkill: boolean;
   onClose: () => void;
-  onCheckUpdate: () => void;
-  onUpdateSkill: () => void;
   onInstall: (targetAgent: string) => void;
   onUninstall: () => void;
   onUninstallFromTarget: (skillPath: string, isSymlink: boolean) => void;
@@ -42,11 +36,7 @@ export function DetailPanel({
   skillContent,
   skillFiles,
   agentStatuses,
-  checkingUpdate,
-  updatingSkill,
   onClose,
-  onCheckUpdate,
-  onUpdateSkill,
   onInstall,
   onUninstall,
   onUninstallFromTarget,
@@ -148,51 +138,6 @@ export function DetailPanel({
                 <div className="label">Version</div>
                 <div className="value">{getVersionLabel(selected)}</div>
               </div>
-              <div className="detail-meta-item">
-                <div className="label">Update Status</div>
-                <div className="value">
-                  {getUpdateStatusLabel(selected.update_status, selected.update_capability) ?? "Not Checked"}
-                </div>
-              </div>
-              <div className="detail-meta-item">
-                <div className="label">Upstream Version</div>
-                <div className="value">{selected.upstream_version ?? "Unknown"}</div>
-              </div>
-              <div className="detail-meta-item">
-                <div className="label">Last Checked</div>
-                <div className="value">{formatLastChecked(selected.last_checked_at)}</div>
-              </div>
-            </div>
-          </div>
-
-          <div className="detail-section">
-            <div className="detail-section-header-flex">
-              <div className="detail-section-label">Updates</div>
-            </div>
-            <div className="detail-action-row">
-              <button
-                className="detail-action-btn"
-                onClick={onCheckUpdate}
-                disabled={checkingUpdate || updatingSkill}
-              >
-                <RefreshIcon size={14} className="btn-icon" />
-                {checkingUpdate ? "Checking..." : "Check Update"}
-              </button>
-              <button
-                className="detail-action-btn primary"
-                onClick={onUpdateSkill}
-                disabled={!canAutoUpdate(selected) || checkingUpdate || updatingSkill}
-              >
-                <DownloadIcon size={14} className="btn-icon" />
-                {updatingSkill ? "Updating..." : "Update Skill"}
-              </button>
-            </div>
-            <div className="detail-help-text">
-              {selected.update_capability === "github"
-                ? "GitHub-backed skills can be updated automatically. A backup is created before files are overwritten."
-                : selected.update_capability === "external"
-                  ? "External sources support version hints only. Update this skill manually from its source."
-                  : "This skill does not expose an auto-update source."}
             </div>
           </div>
 

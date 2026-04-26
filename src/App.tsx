@@ -2,9 +2,10 @@ import { useEffect, useRef, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { open } from "@tauri-apps/plugin-dialog";
 import { revealItemInDir } from "@tauri-apps/plugin-opener";
+import { relaunch } from "@tauri-apps/plugin-process";
+import { check, type DownloadEvent, type Update } from "@tauri-apps/plugin-updater";
 import "./styles/global.css";
 import {
-  DownloadIcon,
   FolderOpenIcon,
   GlobeIcon,
   RefreshIcon,
@@ -41,6 +42,7 @@ import { buildBrowserSkillPresentation } from "./lib/skillBrowserPresentation";
 import { getSkillId, matchesInstalledSkill } from "./lib/skillIdentity";
 import { type SkillInfo } from "./lib/skillTypes";
 import { getTopbarRefreshState } from "./lib/topbarRefreshState";
+import { type AppUpdateState } from "./lib/appUpdatePresentation";
 import {
   buildDiscoverMenuItems,
   buildSettingsMenuItems,
@@ -57,6 +59,11 @@ import {
   type AppSettings,
 } from "./lib/appSettings";
 import { type RemoteMarketEntry, type RemoteMarketSource } from "./lib/marketTypes";
+import type {
+  LocalSkillModel,
+  SkillScoutRecommendation,
+  SkillScoutResponse,
+} from "./lib/localScoutTypes";
 import { getSharedLibraryCategoryLabel } from "./lib/sharedLibraryCategories";
 
 interface Toast {
@@ -84,6 +91,13 @@ interface ContextMenuState {
   y: number;
   sections: ContextMenuSection[];
 }
+
+const DEFAULT_APP_UPDATE_STATE: AppUpdateState = {
+  status: "idle",
+  progress: 0,
+  version: null,
+  error: null,
+};
 
 const getBoxStyle = (box: SelectionBox | null) => {
   if (!box) return { display: "none" };
@@ -115,6 +129,9 @@ const getSharedCategoryFromTarget = (value: string | null): string | null => {
   return value.slice("shared-category:".length);
 };
 
+const getLocalScoutRecommendationKey = (recommendation: SkillScoutRecommendation) =>
+  `${recommendation.github_url}:${recommendation.skill_name ?? ""}`;
+
 function App() {
   const [skills, setSkills] = useState<SkillInfo[]>([]);
   const [loading, setLoading] = useState(true);
@@ -143,6 +160,17 @@ function App() {
   const [githubInstallUrl, setGithubInstallUrl] = useState("");
   const [githubInstallSkillName, setGithubInstallSkillName] = useState("");
   const [githubInstalling, setGithubInstalling] = useState(false);
+  const [localScoutModels, setLocalScoutModels] = useState<LocalSkillModel[]>([]);
+  const [localScoutModelId, setLocalScoutModelId] = useState("");
+  const [localScoutDetecting, setLocalScoutDetecting] = useState(false);
+  const [localScoutProvider, setLocalScoutProvider] = useState<LocalSkillModel["provider"]>("openai_compatible");
+  const [localScoutBaseUrl, setLocalScoutBaseUrl] = useState("http://localhost:1234/v1");
+  const [localScoutModel, setLocalScoutModel] = useState("");
+  const [localScoutPrompt, setLocalScoutPrompt] = useState("");
+  const [localScoutResponse, setLocalScoutResponse] = useState<SkillScoutResponse | null>(null);
+  const [localScoutLoading, setLocalScoutLoading] = useState(false);
+  const [localScoutError, setLocalScoutError] = useState<string | null>(null);
+  const [installingLocalScoutKey, setInstallingLocalScoutKey] = useState<string | null>(null);
 
   const [selected, setSelected] = useState<SkillInfo | null>(null);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
@@ -159,11 +187,7 @@ function App() {
   const [contentLoading, setContentLoading] = useState(false);
   const [targets, setTargets] = useState<AgentTarget[]>([]);
   const [toast, setToast] = useState<Toast | null>(null);
-  const [checkingAll, setCheckingAll] = useState(false);
-  const [updatingAll, setUpdatingAll] = useState(false);
   const [autoCategorizing, setAutoCategorizing] = useState(false);
-  const [checkingSelected, setCheckingSelected] = useState(false);
-  const [updatingSkillCanonicalPath, setUpdatingSkillCanonicalPath] = useState<string | null>(null);
   const [isDragging, setIsDragging] = useState(false);
   const [dragDebug, setDragDebug] = useState("idle");
   const [dragPreview, setDragPreview] = useState<{ x: number; y: number; count: number } | null>(null);
@@ -173,6 +197,7 @@ function App() {
   const migrationInFlightRef = useRef(false);
   const pointerDragRef = useRef<PointerDragState | null>(null);
   const suppressClickRef = useRef(false);
+  const dragActiveRef = useRef(false);
 
   const [appSettings, setAppSettings] = useState<AppSettings | null>(null);
   const [settingsDraft, setSettingsDraft] = useState<AppSettings | null>(null);
@@ -181,9 +206,12 @@ function App() {
   const [settingsSaving, setSettingsSaving] = useState(false);
   const [settingsError, setSettingsError] = useState<string | null>(null);
   const [contextMenu, setContextMenu] = useState<ContextMenuState | null>(null);
+  const [appUpdateState, setAppUpdateState] = useState<AppUpdateState>(
+    DEFAULT_APP_UPDATE_STATE,
+  );
+  const pendingAppUpdateRef = useRef<Update | null>(null);
 
   const bootstrapCompleteRef = useRef(false);
-  const autoCheckedOnLaunchRef = useRef(false);
 
   const activeSidebarItem: SidebarItem = settingsOpen ? "settings" : discoverView ?? filter;
   const settingsDirty =
@@ -246,19 +274,6 @@ function App() {
       setAppInfo(nextInfo);
     } catch (error) {
       console.error(error);
-    }
-  };
-
-  const runCheckAll = async () => {
-    setCheckingAll(true);
-    try {
-      const result = await invoke<string>("check_all_skill_updates");
-      showToast(result, "success");
-    } catch (err) {
-      showToast(String(err), "error");
-    } finally {
-      await refreshSkills({ reloadSelected: !!selected });
-      setCheckingAll(false);
     }
   };
 
@@ -374,14 +389,6 @@ function App() {
         setStatusFilter(initialBrowserState.statusFilter);
         applyDocumentSettings(nextSettings);
         bootstrapCompleteRef.current = true;
-
-        if (
-          nextSettings.auto_check_updates_on_launch &&
-          !autoCheckedOnLaunchRef.current
-        ) {
-          autoCheckedOnLaunchRef.current = true;
-          void runCheckAll();
-        }
       } catch (error) {
         console.error(error);
       } finally {
@@ -456,6 +463,58 @@ function App() {
     }
   };
 
+  const applyLocalScoutModel = (model: LocalSkillModel) => {
+    setLocalScoutModelId(model.id);
+    setLocalScoutProvider(model.provider);
+    setLocalScoutBaseUrl(model.base_url);
+    setLocalScoutModel(model.model);
+    setLocalScoutError(null);
+  };
+
+  const loadLocalScoutModels = async () => {
+    setLocalScoutDetecting(true);
+    setLocalScoutError(null);
+    try {
+      const detected = await invoke<LocalSkillModel[]>("detect_local_skill_models");
+      setLocalScoutModels(detected);
+      if (detected.length > 0 && localScoutModel.trim() === "") {
+        applyLocalScoutModel(detected[0]);
+      }
+      if (detected.length === 0) {
+        setLocalScoutError(
+          "No local models were detected. Start Ollama, LM Studio, or enter an OpenAI-compatible endpoint manually.",
+        );
+      }
+    } catch (error) {
+      setLocalScoutError(String(error));
+    } finally {
+      setLocalScoutDetecting(false);
+    }
+  };
+
+  const handleSelectLocalScoutModel = (id: string) => {
+    setLocalScoutModelId(id);
+    const selectedModel = localScoutModels.find((model) => model.id === id);
+    if (selectedModel) {
+      applyLocalScoutModel(selectedModel);
+    }
+  };
+
+  const handleLocalScoutProviderChange = (value: LocalSkillModel["provider"]) => {
+    setLocalScoutModelId("");
+    setLocalScoutProvider(value);
+  };
+
+  const handleLocalScoutBaseUrlChange = (value: string) => {
+    setLocalScoutModelId("");
+    setLocalScoutBaseUrl(value);
+  };
+
+  const handleLocalScoutModelChange = (value: string) => {
+    setLocalScoutModelId("");
+    setLocalScoutModel(value);
+  };
+
   useEffect(() => {
     if (!activeMarketSource) return;
     if (marketEntries[activeMarketSource].length > 0) return;
@@ -464,6 +523,13 @@ function App() {
 
     void loadRemoteMarket(activeMarketSource);
   }, [activeMarketSource, marketEntries, marketLoading, marketErrors]);
+
+  useEffect(() => {
+    if (discoverView !== "AI Skill Scout") return;
+    if (localScoutModels.length > 0 || localScoutDetecting) return;
+
+    void loadLocalScoutModels();
+  }, [discoverView, localScoutModels.length, localScoutDetecting]);
 
   useEffect(() => {
     if (!isDragging) {
@@ -712,6 +778,7 @@ function App() {
       allowSelectedFallback: !!options?.allowSelectedFallback,
     });
 
+
     if (batch.length === 0) return;
 
     if (movableBatch.length === 0) {
@@ -815,6 +882,9 @@ function App() {
       migrationInFlight: migrationInFlightRef.current,
     });
     setDragDebug(`end:${fallbackTarget ?? "none"}`);
+    // Clear dragActiveRef after a timeout so the sidebar click event
+    // (which fires right after mouseup) still sees it as true and is suppressed.
+    setTimeout(() => { dragActiveRef.current = false; }, 0);
     setIsDragging(false);
     setDragPreview(null);
     setDragOverTarget(null);
@@ -868,6 +938,7 @@ function App() {
         draggedBatchRef.current = batch;
         pointerDrag.started = true;
         suppressClickRef.current = true;
+        dragActiveRef.current = true;
         setIsDragging(true);
         setDragDebug(`pointer-start:${batch.length}`);
       }
@@ -921,6 +992,7 @@ function App() {
       pointerDragRef.current = null;
 
       if (pointerDrag.started) {
+        suppressClickRef.current = true;
         handleDragEnd();
         return;
       }
@@ -1015,6 +1087,57 @@ function App() {
     }
   };
 
+  const handleAskLocalScout = async () => {
+    setLocalScoutLoading(true);
+    setLocalScoutError(null);
+    try {
+      const response = await invoke<SkillScoutResponse>("chat_with_local_skill_scout", {
+        request: {
+          provider: localScoutProvider,
+          base_url: localScoutBaseUrl,
+          model: localScoutModel,
+          prompt: localScoutPrompt,
+        },
+      });
+      setLocalScoutResponse(response);
+    } catch (error) {
+      setLocalScoutError(String(error));
+    } finally {
+      setLocalScoutLoading(false);
+    }
+  };
+
+  const handleInstallLocalScoutRecommendation = async (
+    recommendation: SkillScoutRecommendation,
+  ) => {
+    const confirmed = window.confirm(
+      `Install "${recommendation.title}" to Shared Library from ${recommendation.github_url}?`,
+    );
+    if (!confirmed) return;
+
+    const recommendationKey = getLocalScoutRecommendationKey(recommendation);
+    const skillName = recommendation.skill_name?.trim() ?? "";
+    setInstallingLocalScoutKey(recommendationKey);
+    try {
+      const result = await invoke<string>("install_skill_from_github", {
+        githubUrl: recommendation.github_url,
+        targetAgent: "Shared Library",
+        skillName: skillName === "" ? null : skillName,
+        marketSource: "AI Skill Scout",
+        marketUrl: null,
+      });
+      showToast(result, "success");
+      await Promise.all([
+        refreshSkills({ reloadSelected: !!selected }),
+        refreshMeta(),
+      ]);
+    } catch (error) {
+      showToast(String(error), "error");
+    } finally {
+      setInstallingLocalScoutKey(null);
+    }
+  };
+
   const handleRemoveSkill = async (skill: SkillInfo) => {
     const confirmed = await confirmIfNeeded(
       `Remove "${skill.name}" from ${skill.agent}?${
@@ -1066,70 +1189,6 @@ function App() {
       await refreshMeta();
     } catch (err) {
       showToast(String(err), "error");
-    }
-  };
-
-  const handleCheckSkill = async (skill: SkillInfo) => {
-    const isSelectedSkill = selected?.path === skill.path;
-    if (isSelectedSkill) {
-      setCheckingSelected(true);
-    }
-    try {
-      const result = await invoke<string>("check_skill_updates", {
-        skillPath: skill.path,
-      });
-      showToast(result, "success");
-    } catch (err) {
-      showToast(String(err), "error");
-    } finally {
-      await refreshSkills({ reloadSelected: !!selected });
-      if (isSelectedSkill) {
-        setCheckingSelected(false);
-      }
-    }
-  };
-
-  const handleCheckSelected = async () => {
-    if (!selected) return;
-    await handleCheckSkill(selected);
-  };
-
-  const runSingleSkillUpdate = async (skill: SkillInfo) => {
-    if (updatingSkillCanonicalPath || updatingAll || checkingAll) return;
-
-    setUpdatingSkillCanonicalPath(skill.canonical_path);
-    try {
-      const result = await invoke<string>("update_skill", {
-        skillPath: skill.path,
-      });
-      showToast(result, "success");
-    } catch (err) {
-      showToast(String(err), "error");
-    } finally {
-      await refreshSkills({ reloadSelected: !!selected });
-      setUpdatingSkillCanonicalPath(null);
-    }
-  };
-
-  const handleUpdateSelected = async () => {
-    if (!selected) return;
-    await runSingleSkillUpdate(selected);
-  };
-
-  const handleInlineUpdate = async (skill: SkillInfo) => {
-    await runSingleSkillUpdate(skill);
-  };
-
-  const handleUpdateAll = async () => {
-    setUpdatingAll(true);
-    try {
-      const result = await invoke<string>("update_all_skills");
-      showToast(result, "success");
-    } catch (err) {
-      showToast(String(err), "error");
-    } finally {
-      await refreshSkills({ reloadSelected: !!selected });
-      setUpdatingAll(false);
     }
   };
 
@@ -1233,13 +1292,123 @@ function App() {
     showToast("Skill scan refreshed", "success");
   };
 
-  const handleClearUpdateCache = async () => {
+  const handleCheckForAppUpdate = async () => {
+    pendingAppUpdateRef.current = null;
+    setAppUpdateState({
+      status: "checking",
+      progress: 0,
+      version: null,
+      error: null,
+    });
+
     try {
-      const result = await invoke<string>("clear_update_cache");
-      showToast(result, "success");
-      await refreshSkills({ reloadSelected: !!selected });
+      const update = await check();
+
+      if (!update) {
+        setAppUpdateState({
+          status: "up-to-date",
+          progress: 0,
+          version: null,
+          error: null,
+        });
+        return;
+      }
+
+      pendingAppUpdateRef.current = update;
+      setAppUpdateState({
+        status: "available",
+        progress: 0,
+        version: update.version,
+        error: null,
+      });
+
+      let downloadedBytes = 0;
+      let contentLength = 0;
+
+      await update.download((event: DownloadEvent) => {
+        if (event.event === "Started") {
+          downloadedBytes = 0;
+          contentLength = event.data.contentLength ?? 0;
+          setAppUpdateState({
+            status: "downloading",
+            progress: 0,
+            version: update.version,
+            error: null,
+          });
+          return;
+        }
+
+        if (event.event === "Progress") {
+          downloadedBytes += event.data.chunkLength;
+          const progress =
+            contentLength > 0
+              ? Math.min(99, Math.round((downloadedBytes / contentLength) * 100))
+              : 0;
+          setAppUpdateState({
+            status: "downloading",
+            progress,
+            version: update.version,
+            error: null,
+          });
+          return;
+        }
+
+        setAppUpdateState({
+          status: "downloading",
+          progress: 100,
+          version: update.version,
+          error: null,
+        });
+      });
+
+      setAppUpdateState({
+        status: "ready",
+        progress: 100,
+        version: update.version,
+        error: null,
+      });
     } catch (error) {
-      showToast(String(error), "error");
+      const message = String(error);
+      setAppUpdateState({
+        status: "error",
+        progress: 0,
+        version: null,
+        error: message,
+      });
+      showToast(message, "error");
+    }
+  };
+
+  const handleInstallAppUpdate = async () => {
+    const update = pendingAppUpdateRef.current;
+
+    if (!update) {
+      setAppUpdateState({
+        status: "error",
+        progress: 0,
+        version: null,
+        error: "No downloaded update is ready to install.",
+      });
+      return;
+    }
+
+    setAppUpdateState((current) => ({
+      ...current,
+      status: "installing",
+      error: null,
+    }));
+
+    try {
+      await update.install();
+      await relaunch();
+    } catch (error) {
+      const message = String(error);
+      setAppUpdateState((current) => ({
+        ...current,
+        status: "error",
+        error: message,
+      }));
+      showToast(message, "error");
     }
   };
 
@@ -1300,8 +1469,7 @@ function App() {
       ...item,
       icon:
         item.id === "reveal" ? <FolderOpenIcon size={14} /> :
-        item.id === "rescan" || item.id === "check-updates" ? <RefreshIcon size={14} /> :
-        item.id === "update-all" ? <DownloadIcon size={14} /> :
+        item.id === "rescan" ? <RefreshIcon size={14} /> :
         <SearchIcon size={14} />,
       onSelect: async () => {
         if (item.id === "open") {
@@ -1319,14 +1487,6 @@ function App() {
           await handleRescan();
           return;
         }
-        if (item.id === "check-updates") {
-          await runCheckAll();
-          return;
-        }
-        if (item.id === "update-all") {
-          await handleUpdateAll();
-          return;
-        }
         if (item.id === "auto-categorize") {
           await handleAutoCategorize();
         }
@@ -1340,18 +1500,27 @@ function App() {
     event: React.MouseEvent,
     view: DiscoverView,
   ) => {
-    const refreshable = view === "huggingface" || view === "skills.sh";
+    const refreshable =
+      view === "AI Skill Scout" || view === "huggingface" || view === "skills.sh";
     const items = buildDiscoverMenuItems({ view }).map((item) => ({
       ...item,
       disabled: item.id === "refresh-source" ? !refreshable : item.disabled,
-      icon: item.id === "refresh-source" ? <RefreshIcon size={14} /> : <GlobeIcon size={14} />,
+      icon:
+        item.id === "refresh-source" ? <RefreshIcon size={14} /> :
+        <GlobeIcon size={14} />,
       onSelect: async () => {
         if (item.id === "open") {
           openDiscover(view);
           return;
         }
         if (item.id === "refresh-source" && refreshable) {
-          await loadRemoteMarket(view);
+          if (view === "AI Skill Scout") {
+            await loadLocalScoutModels();
+            return;
+          }
+          if (view === "huggingface" || view === "skills.sh") {
+            await loadRemoteMarket(view);
+          }
         }
       },
     }));
@@ -1390,7 +1559,6 @@ function App() {
 
     const menuModel = buildSkillMenuItems({
       selectedSkills: menuSkills,
-      targets,
     });
 
     const toMenuSections = (): ContextMenuSection[] => {
@@ -1402,8 +1570,6 @@ function App() {
             ...item,
             icon:
               item.id === "reveal" ? <FolderOpenIcon size={14} /> :
-              item.id === "check-update" ? <RefreshIcon size={14} /> :
-              item.id === "update-skill" ? <DownloadIcon size={14} /> :
               <SearchIcon size={14} />,
             onSelect: async () => {
               if (item.id === "open-details") {
@@ -1412,38 +1578,6 @@ function App() {
               }
               if (item.id === "reveal") {
                 await handleRevealPath(singleSkill.path);
-                return;
-              }
-              if (item.id === "check-update") {
-                await handleCheckSkill(singleSkill);
-                return;
-              }
-              if (item.id === "update-skill") {
-                await runSingleSkillUpdate(singleSkill);
-              }
-            },
-          })),
-        },
-        {
-          key: "install",
-          items: menuModel.install.map((item) => ({
-            ...item,
-            icon: <DownloadIcon size={14} />,
-            onSelect: async () => {
-              if (item.target) {
-                await handleInstallSpecific(singleSkill, item.target as AgentFilter);
-              }
-            },
-          })),
-        },
-        {
-          key: "move",
-          items: menuModel.move.map((item) => ({
-            ...item,
-            icon: <RefreshIcon size={14} />,
-            onSelect: async () => {
-              if (item.target) {
-                await executeMigrationBatch(menuSkills, item.target as AgentFilter);
               }
             },
           })),
@@ -1524,9 +1658,6 @@ function App() {
   const currentMarketError = activeMarketSource ? marketErrors[activeMarketSource] : null;
   const topbarRefreshState = getTopbarRefreshState({
     loading,
-    checkingAll,
-    updatingAll,
-    updatingSkill: updatingSkillCanonicalPath !== null,
   });
 
   return (
@@ -1606,6 +1737,7 @@ function App() {
         onSettingsContextMenu={handleSettingsContextMenu}
         countByAgent={countByAgent}
         dragOverTarget={dragOverTarget}
+        dragActiveRef={dragActiveRef}
         onDragOver={handleDragOver}
         onDragLeave={handleDragLeave}
         onDrop={handleDrop}
@@ -1621,14 +1753,16 @@ function App() {
               saving={settingsSaving}
               dirty={settingsDirty}
               error={settingsError}
+              appUpdateState={appUpdateState}
               onSettingsChange={handleSettingsChange}
               onBrowseSharedLibrary={handleBrowseSharedLibrary}
               onSave={handleSaveSettings}
               onCancel={handleCancelSettings}
               onLoadDefaults={handleLoadDefaults}
               onRescan={handleRescan}
-              onClearUpdateCache={handleClearUpdateCache}
               onRevealPath={handleRevealPath}
+              onCheckAppUpdate={handleCheckForAppUpdate}
+              onInstallAppUpdate={handleInstallAppUpdate}
             />
           )
         ) : discoverView ? (
@@ -1655,6 +1789,25 @@ function App() {
             setGithubInstallSkillName={setGithubInstallSkillName}
             onInstallGithub={handleInstallGithub}
             githubInstalling={githubInstalling}
+            localScoutModels={localScoutModels}
+            localScoutModelId={localScoutModelId}
+            onSelectLocalScoutModel={handleSelectLocalScoutModel}
+            localScoutDetecting={localScoutDetecting}
+            localScoutProvider={localScoutProvider}
+            setLocalScoutProvider={handleLocalScoutProviderChange}
+            localScoutBaseUrl={localScoutBaseUrl}
+            setLocalScoutBaseUrl={handleLocalScoutBaseUrlChange}
+            localScoutModel={localScoutModel}
+            setLocalScoutModel={handleLocalScoutModelChange}
+            localScoutPrompt={localScoutPrompt}
+            setLocalScoutPrompt={setLocalScoutPrompt}
+            localScoutResponse={localScoutResponse}
+            localScoutLoading={localScoutLoading}
+            localScoutError={localScoutError}
+            onRefreshLocalScoutModels={loadLocalScoutModels}
+            onAskLocalScout={handleAskLocalScout}
+            onInstallLocalScoutRecommendation={handleInstallLocalScoutRecommendation}
+            installingLocalScoutKey={installingLocalScoutKey}
           />
         ) : (
           <>
@@ -1669,8 +1822,6 @@ function App() {
               refreshing={topbarRefreshState.spinning}
               refreshDisabled={topbarRefreshState.disabled}
               refreshLabel={topbarRefreshState.label}
-              checkingAll={checkingAll}
-              updatingAll={updatingAll}
               autoCategorizing={autoCategorizing}
               categorizationEnabled={appSettings?.categorization_enabled ?? false}
               onStatusFilterChange={handleStatusFilterChange}
@@ -1686,8 +1837,6 @@ function App() {
                 setSelectedSharedCategories(new Set());
               }}
               onRefresh={handleRescan}
-              onCheckUpdates={runCheckAll}
-              onUpdateAll={handleUpdateAll}
               onAutoCategorize={handleAutoCategorize}
             />
 
@@ -1706,10 +1855,6 @@ function App() {
               onCardClick={handleCardClick}
               onCardMouseDown={handleDragStart}
               onCardContextMenu={handleSkillContextMenu}
-              updatingSkillCanonicalPath={updatingSkillCanonicalPath}
-              updatesLocked={
-                checkingAll || updatingAll || updatingSkillCanonicalPath !== null
-              }
               onToggleSharedCategory={(slug) => {
                 setCollapsedSharedCategories((current) => {
                   const next = new Set(current);
@@ -1727,7 +1872,6 @@ function App() {
               onSharedCategoryDrop={(event, slug) => {
                 void handleDrop(event, `shared-category:${slug}`);
               }}
-              onInlineUpdate={handleInlineUpdate}
             />
           </>
         )}
@@ -1740,11 +1884,7 @@ function App() {
           skillContent={skillContent}
           skillFiles={skillFiles}
           agentStatuses={agentStatuses}
-          checkingUpdate={checkingSelected || checkingAll}
-          updatingSkill={updatingAll || updatingSkillCanonicalPath !== null}
           onClose={closeDetail}
-          onCheckUpdate={handleCheckSelected}
-          onUpdateSkill={handleUpdateSelected}
           onInstall={handleInstall}
           onUninstall={handleUninstall}
           onUninstallFromTarget={handleUninstallFromTarget}

@@ -39,9 +39,6 @@ function getFallbackStatusCounts(skills: SkillInfo[]): StatusCounts {
     all: skills.length,
     symlinked: skills.filter((skill) => skill.is_symlink).length,
     local: skills.filter((skill) => !skill.is_symlink).length,
-    updates: skills.filter(
-      (skill) => skill.update_status === "update_available",
-    ).length,
   };
 }
 
@@ -103,8 +100,6 @@ function filterSkillsByStatus(
       return skills.filter((skill) => skill.is_symlink);
     case "local":
       return skills.filter((skill) => !skill.is_symlink);
-    case "updates":
-      return skills.filter((skill) => skill.update_status === "update_available");
     default:
       return skills;
   }
@@ -217,17 +212,11 @@ export function buildSkillPresentation(
   const presentedLocal = groups
     .filter((group) => !isSharedBackedGroup(group.skills))
     .map((group) => presentGroup(group.skills));
-  const presentedUpdates = groups
-    .filter((group) =>
-      group.skills.some((skill) => skill.update_status === "update_available"),
-    )
-    .map((group) => presentGroup(group.skills));
 
   const statusCounts: StatusCounts = {
     all: presentedAll.length,
     symlinked: presentedSymlinked.length,
     local: presentedLocal.length,
-    updates: presentedUpdates.length,
   };
 
   switch (statusFilter) {
@@ -241,13 +230,6 @@ export function buildSkillPresentation(
     case "local":
       return {
         skills: presentedLocal,
-        statusCounts,
-        sharedCategoryGroups: emptySharedCategoryGroups,
-        sharedCategoryCounts: emptySharedCategoryCounts,
-      };
-    case "updates":
-      return {
-        skills: presentedUpdates,
         statusCounts,
         sharedCategoryGroups: emptySharedCategoryGroups,
         sharedCategoryCounts: emptySharedCategoryCounts,
