@@ -33,8 +33,8 @@ fn get_agent_targets() -> Vec<AgentTarget> {
 }
 
 #[tauri::command]
-fn fetch_remote_market(source: String) -> Result<Vec<RemoteMarketEntry>, String> {
-    market::fetch_remote_market(&source)
+fn fetch_remote_market(source: String, force_refresh: Option<bool>) -> Result<Vec<RemoteMarketEntry>, String> {
+    market::fetch_remote_market(&source, force_refresh.unwrap_or(false))
 }
 
 #[tauri::command]

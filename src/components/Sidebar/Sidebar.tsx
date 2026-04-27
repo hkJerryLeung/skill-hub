@@ -19,7 +19,7 @@ export type AgentFilter = "all" | "Claude Code" | "Antigravity" | "Codex" | "Cur
 export type DiscoverView = "AI Skill Scout" | "huggingface" | "skills.sh" | "skillsmp.com" | "Install via GitHub";
 export type SidebarItem = AgentFilter | DiscoverView | "settings";
 
-const AGENTS: { key: AgentFilter; label: string; Icon: React.FC<any> }[] = [
+const AGENTS: { key: AgentFilter; label: string; Icon: React.FC<any>; color?: string }[] = [
   { key: "all", label: "All Skills", Icon: AllSkillsIcon },
   { key: "Shared Library", label: "Shared Library", Icon: SharedLibraryIcon },
   { key: "Claude Code", label: "Claude Code", Icon: ClaudeIcon },
@@ -125,7 +125,7 @@ export function Sidebar({
               onContextMenu={(event) => onAgentContextMenu(event, a.key)}
             >
               <span className="icon">
-                <a.Icon size={16} />
+                <a.Icon size={16} color={a.color || "currentColor"} />
               </span>
               {a.label}
               <span className="badge">{countByAgent(a.key)}</span>

@@ -108,7 +108,7 @@ fn default_shared_library_path() -> String {
         .to_string()
 }
 
-fn config_root() -> Result<PathBuf, String> {
+pub(crate) fn config_root() -> Result<PathBuf, String> {
     let base =
         dirs::config_dir().ok_or_else(|| String::from("Failed to resolve config directory"))?;
     let current = base.join(APP_CONFIG_DIR_NAME);

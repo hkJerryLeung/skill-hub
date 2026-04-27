@@ -447,13 +447,14 @@ function App() {
     return () => window.clearTimeout(timeout);
   }, [appSettings?.restore_last_session, filter, search, statusFilter]);
 
-  const loadRemoteMarket = async (source: RemoteMarketSource) => {
+  const loadRemoteMarket = async (source: RemoteMarketSource, forceRefresh = false) => {
     setMarketLoading((current) => ({ ...current, [source]: true }));
     setMarketErrors((current) => ({ ...current, [source]: null }));
 
     try {
       const nextEntries = await invoke<RemoteMarketEntry[]>("fetch_remote_market", {
         source,
+        forceRefresh,
       });
       setMarketEntries((current) => ({ ...current, [source]: nextEntries }));
     } catch (error) {
@@ -1519,7 +1520,7 @@ function App() {
             return;
           }
           if (view === "huggingface" || view === "skills.sh") {
-            await loadRemoteMarket(view);
+            await loadRemoteMarket(view, true);
           }
         }
       },
@@ -1778,7 +1779,7 @@ function App() {
             installTargets={targets}
             onRefresh={() => {
               if (activeMarketSource) {
-                void loadRemoteMarket(activeMarketSource);
+                void loadRemoteMarket(activeMarketSource, true);
               }
             }}
             onInstallEntry={handleInstallMarketEntry}

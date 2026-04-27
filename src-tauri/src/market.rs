@@ -1,6 +1,8 @@
 use crate::scanner;
+use crate::settings;
+use rayon::prelude::*;
 use reqwest::blocking::Client;
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 use std::fs;
 use std::io::Write;
 use std::path::{Component, Path, PathBuf};
@@ -8,9 +10,11 @@ use std::process::Command;
 use std::time::{SystemTime, UNIX_EPOCH};
 use walkdir::WalkDir;
 
+const CACHE_TTL_SECS: u64 = 3600;
+
 const REQUEST_USER_AGENT: &str = "skill-gate/0.1";
 
-#[derive(Debug, Clone, Serialize, PartialEq, Eq)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct RemoteMarketEntry {
     pub source: String,
     pub repo: String,
@@ -21,6 +25,12 @@ pub struct RemoteMarketEntry {
     pub summary: Option<String>,
     pub market_url: String,
     pub install_command: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+struct CachedMarket {
+    fetched_at: u64,
+    entries: Vec<RemoteMarketEntry>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -36,7 +46,13 @@ struct DownloadedRepository {
     branch: String,
 }
 
-pub fn fetch_remote_market(source: &str) -> Result<Vec<RemoteMarketEntry>, String> {
+pub fn fetch_remote_market(source: &str, force_refresh: bool) -> Result<Vec<RemoteMarketEntry>, String> {
+    if !force_refresh {
+        if let Some(cached) = read_cache(source) {
+            return Ok(cached);
+        }
+    }
+
     let entries = match source {
         "skills.sh" => {
             let html = fetch_text("https://skills.sh/")?;
@@ -49,7 +65,9 @@ pub fn fetch_remote_market(source: &str) -> Result<Vec<RemoteMarketEntry>, Strin
         other => Err(format!("Unsupported market source: {}", other)),
     }?;
 
-    Ok(enrich_market_entries(entries))
+    let enriched = enrich_market_entries(entries);
+    write_cache(source, &enriched);
+    Ok(enriched)
 }
 
 pub fn install_skill_from_github(
@@ -355,12 +373,58 @@ fn market_url_for_skill(repo: &str, skill_id: &str) -> String {
 
 fn enrich_market_entries(entries: Vec<RemoteMarketEntry>) -> Vec<RemoteMarketEntry> {
     entries
-        .into_iter()
+        .into_par_iter()
         .map(|entry| {
             let fallback = entry.clone();
             enrich_market_entry(entry).unwrap_or(fallback)
         })
         .collect()
+}
+
+fn cache_path(source: &str) -> Option<PathBuf> {
+    let root = settings::config_root().ok()?;
+    let cache_dir = root.join("cache");
+    let filename = format!("market-{}.json", source.replace('/', "-"));
+    Some(cache_dir.join(filename))
+}
+
+fn read_cache(source: &str) -> Option<Vec<RemoteMarketEntry>> {
+    let path = cache_path(source)?;
+    let content = fs::read_to_string(&path).ok()?;
+    let cached: CachedMarket = serde_json::from_str(&content).ok()?;
+
+    let now = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .unwrap_or_default()
+        .as_secs();
+
+    if now.saturating_sub(cached.fetched_at) > CACHE_TTL_SECS {
+        return None;
+    }
+
+    Some(cached.entries)
+}
+
+fn write_cache(source: &str, entries: &[RemoteMarketEntry]) {
+    let Some(path) = cache_path(source) else {
+        return;
+    };
+
+    if let Some(parent) = path.parent() {
+        let _ = fs::create_dir_all(parent);
+    }
+
+    let cached = CachedMarket {
+        fetched_at: SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap_or_default()
+            .as_secs(),
+        entries: entries.to_vec(),
+    };
+
+    if let Ok(json) = serde_json::to_string_pretty(&cached) {
+        let _ = fs::write(&path, json);
+    }
 }
 
 fn enrich_market_entry(mut entry: RemoteMarketEntry) -> Result<RemoteMarketEntry, String> {
