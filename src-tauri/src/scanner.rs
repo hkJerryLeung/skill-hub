@@ -19,6 +19,7 @@ const SHARED_LIBRARY_CATEGORY_SLUGS: &[&str] = &[
 ];
 const SKILL_GATE_METADATA_FILE: &str = ".skill-gate.json";
 const LEGACY_SKILL_HUB_METADATA_FILE: &str = ".skill-hub.json";
+const BIN_AGENT_NAME: &str = "Bin";
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "snake_case")]
@@ -162,9 +163,8 @@ struct AgentConfig {
 /// Get the list of known agent skill directories
 fn get_agent_configs() -> Vec<AgentConfig> {
     let home = dirs::home_dir().unwrap_or_default();
-    let shared_library_path = settings::load_settings()
-        .map(|settings| PathBuf::from(settings.shared_library_path))
-        .unwrap_or_else(|_| home.join("SharedSkills"));
+    let app_settings = settings::load_settings().unwrap_or_default();
+    let shared_library_path = PathBuf::from(app_settings.shared_library_path);
     vec![
         AgentConfig {
             name: "Shared Library",
@@ -484,7 +484,10 @@ fn shared_source_link_candidates(skill_name: &str, shared_root: &Path) -> Vec<Pa
     let mut targets = BTreeMap::new();
 
     for skill in scan_all_skills_raw().into_iter().filter(|skill| {
-        skill.agent != "Shared Library" && skill.name == skill_name && skill.is_symlink
+        skill.agent != "Shared Library"
+            && skill.agent != BIN_AGENT_NAME
+            && skill.name == skill_name
+            && skill.is_symlink
     }) {
         let canonical = PathBuf::from(&skill.canonical_path);
         if canonical.is_dir() && !is_path_in_shared_library(&canonical, shared_root) {
@@ -867,6 +870,14 @@ fn scan_all_skills_raw() -> Vec<SkillInfo> {
             all_skills.extend(scan_flat(config));
         }
     }
+    if let Ok(bin_root) = get_bin_root() {
+        let bin_config = AgentConfig {
+            name: BIN_AGENT_NAME,
+            skills_path: bin_root,
+            recursive: false,
+        };
+        all_skills.extend(scan_flat(&bin_config));
+    }
     sort_skills(&mut all_skills);
     all_skills
 }
@@ -927,32 +938,58 @@ pub fn list_skill_files(skill_path: &str) -> Vec<String> {
     let path = Path::new(skill_path);
     let mut files = Vec::new();
 
-    if let Ok(entries) = fs::read_dir(path) {
-        for entry in entries.flatten() {
-            let name = entry.file_name().to_string_lossy().to_string();
-            let is_dir = entry.path().is_dir();
-            files.push(if is_dir {
-                format!("📁 {}", name)
-            } else {
-                format!("📄 {}", name)
-            });
-        }
-    }
+    collect_skill_files(path, path, &mut files);
 
     files.sort();
     files
 }
 
+fn collect_skill_files(root: &Path, dir: &Path, files: &mut Vec<String>) {
+    if let Ok(entries) = fs::read_dir(dir) {
+        for entry in entries.flatten() {
+            let path = entry.path();
+            let Ok(file_type) = entry.file_type() else {
+                continue;
+            };
+
+            if file_type.is_dir() {
+                collect_skill_files(root, &path, files);
+                continue;
+            }
+
+            if !file_type.is_file() {
+                continue;
+            }
+
+            let Ok(relative_path) = path.strip_prefix(root) else {
+                continue;
+            };
+            let normalized_path = relative_path.to_string_lossy().replace('\\', "/");
+            files.push(format!("📄 {}", normalized_path));
+        }
+    }
+}
+
 /// Get available agent targets for installation
 pub fn get_agent_paths() -> Vec<AgentTarget> {
-    get_agent_configs()
+    let mut targets = get_agent_configs()
         .into_iter()
         .map(|c| AgentTarget {
             name: c.name.to_string(),
             path: c.skills_path.to_string_lossy().to_string(),
             exists: c.skills_path.exists(),
         })
-        .collect()
+        .collect::<Vec<_>>();
+
+    if let Ok(bin_root) = get_bin_root() {
+        targets.push(AgentTarget {
+            name: BIN_AGENT_NAME.to_string(),
+            path: bin_root.to_string_lossy().to_string(),
+            exists: bin_root.exists(),
+        });
+    }
+
+    targets
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -982,6 +1019,12 @@ fn get_shared_library_root() -> Result<PathBuf, String> {
         .find(|config| config.name == "Shared Library")
         .map(|config| config.skills_path)
         .ok_or_else(|| String::from("Shared Library target is not configured"))
+}
+
+fn get_bin_root() -> Result<PathBuf, String> {
+    Ok(settings::load_settings()
+        .map(|settings| PathBuf::from(settings.bin_path))
+        .unwrap_or_else(|_| PathBuf::from(settings::default_bin_path())))
 }
 
 fn is_path_in_shared_library(path: &Path, shared_root: &Path) -> bool {
@@ -1587,6 +1630,18 @@ pub fn install_skill_to_shared_category(
         .to_string_lossy()
         .to_string();
     let shared_root = get_shared_library_root()?;
+
+    if is_path_in_bin(source)? {
+        return restore_bin_skill_to_shared_category_with_assignment(
+            source_path,
+            category_slug,
+            CategoryAssignmentMode::Manual,
+            None,
+            None,
+            None,
+        );
+    }
+
     let canonical_source = fs::canonicalize(source).unwrap_or_else(|_| source.to_path_buf());
 
     if is_path_in_shared_library(&canonical_source, &shared_root) {
@@ -1785,6 +1840,320 @@ fn copy_dir_recursive(src: &Path, dst: &Path) -> std::io::Result<()> {
     Ok(())
 }
 
+fn unique_bin_skill_path(bin_root: &Path, skill_name: &str) -> PathBuf {
+    let direct = bin_root.join(skill_name);
+    if !direct.exists() && !direct.is_symlink() {
+        return direct;
+    }
+
+    for attempt in 1..1000 {
+        let candidate = bin_root.join(format!("{}-{}", skill_name, attempt));
+        if !candidate.exists() && !candidate.is_symlink() {
+            return candidate;
+        }
+    }
+
+    bin_root.join(format!("{}-bin", skill_name))
+}
+
+fn move_path_to_destination(source: &Path, dest: &Path) -> Result<(), String> {
+    if source.is_symlink() {
+        let target = fs::canonicalize(source).map_err(|error| {
+            format!(
+                "Failed to resolve symlink target '{}': {}",
+                source.display(),
+                error
+            )
+        })?;
+        create_directory_symlink(&target, dest)?;
+        fs::remove_file(source).map_err(|error| {
+            format!("Failed to remove symlink '{}': {}", source.display(), error)
+        })?;
+        return Ok(());
+    }
+
+    if !source.is_dir() {
+        return Err(format!(
+            "Skill path is not a directory: {}",
+            source.display()
+        ));
+    }
+
+    if fs::rename(source, dest).is_ok() {
+        return Ok(());
+    }
+
+    copy_dir_recursive(source, dest)
+        .map_err(|error| format!("Failed to copy skill into Bin: {}", error))?;
+    fs::remove_dir_all(source)
+        .map_err(|error| format!("Failed to remove original skill after bin move: {}", error))?;
+
+    Ok(())
+}
+
+fn is_path_inside_root(path: &Path, root: &Path) -> bool {
+    let raw_path = if path.is_absolute() {
+        path.to_path_buf()
+    } else {
+        std::env::current_dir()
+            .map(|current_dir| current_dir.join(path))
+            .unwrap_or_else(|_| path.to_path_buf())
+    };
+
+    if raw_path.starts_with(root) {
+        return true;
+    }
+
+    let canonical_path = fs::canonicalize(path).unwrap_or_else(|_| raw_path.clone());
+    let canonical_root = fs::canonicalize(root).unwrap_or_else(|_| root.to_path_buf());
+    canonical_path.starts_with(canonical_root)
+}
+
+fn is_path_in_bin(path: &Path) -> Result<bool, String> {
+    let bin_root = get_bin_root()?;
+    Ok(is_path_inside_root(path, &bin_root))
+}
+
+fn restore_bin_skill_to_agent(source_path: &str, target_agent: &str) -> Result<String, String> {
+    let source = Path::new(source_path);
+    if !source.exists() && !source.is_symlink() {
+        return Err(format!("Path does not exist: {}", source_path));
+    }
+
+    if !is_path_in_bin(source)? {
+        return Err(format!("Skill '{}' is not stored in Bin", source_path));
+    }
+
+    let configs = get_agent_configs();
+    let target = configs
+        .iter()
+        .find(|config| config.name == target_agent)
+        .ok_or_else(|| format!("Unknown agent: {}", target_agent))?;
+
+    let skill_name = source
+        .file_name()
+        .ok_or("Invalid source path")?
+        .to_string_lossy()
+        .to_string();
+    fs::create_dir_all(&target.skills_path)
+        .map_err(|error| format!("Failed to create target dir: {}", error))?;
+    let dest = target.skills_path.join(&skill_name);
+    if dest.exists() || dest.is_symlink() {
+        return Err(format!(
+            "Skill '{}' already exists in {}",
+            skill_name, target_agent
+        ));
+    }
+
+    move_path_to_destination(source, &dest)?;
+
+    Ok(format!("Restored '{}' to {}", skill_name, target_agent))
+}
+
+fn restore_bin_skill_to_shared_library(source_path: &str) -> Result<String, String> {
+    let source = Path::new(source_path);
+    let app_settings = settings::load_settings().unwrap_or_default();
+    let (category, confidence, reason, model) =
+        resolve_shared_library_install_category(source_path, source, &app_settings);
+
+    restore_bin_skill_to_shared_category_with_assignment(
+        source_path,
+        &category,
+        CategoryAssignmentMode::Auto,
+        confidence,
+        reason,
+        model,
+    )
+}
+
+fn restore_bin_skill_to_shared_category_with_assignment(
+    source_path: &str,
+    category_slug: &str,
+    mode: CategoryAssignmentMode,
+    confidence: Option<f64>,
+    reason: Option<String>,
+    model: Option<String>,
+) -> Result<String, String> {
+    if !is_valid_shared_library_category_slug(category_slug) {
+        return Err(format!(
+            "Unknown shared library category: {}",
+            category_slug
+        ));
+    }
+
+    let source = Path::new(source_path);
+    if !source.exists() && !source.is_symlink() {
+        return Err(format!("Path does not exist: {}", source_path));
+    }
+
+    if !is_path_in_bin(source)? {
+        return Err(format!("Skill '{}' is not stored in Bin", source_path));
+    }
+
+    let skill_name = source
+        .file_name()
+        .ok_or("Invalid source path")?
+        .to_string_lossy()
+        .to_string();
+    let shared_root = get_shared_library_root()?;
+    let target_dir = shared_root.join(category_slug);
+    let dest = target_dir.join(&skill_name);
+
+    fs::create_dir_all(&target_dir)
+        .map_err(|error| format!("Failed to create shared category dir: {}", error))?;
+
+    let final_path = if source.is_symlink() {
+        let canonical_source = fs::canonicalize(source).map_err(|error| {
+            format!(
+                "Failed to resolve Bin symlink '{}': {}",
+                source.display(),
+                error
+            )
+        })?;
+
+        if is_path_in_shared_library(&canonical_source, &shared_root) {
+            let result = move_shared_skill_to_category_with_assignment(
+                canonical_source.to_string_lossy().as_ref(),
+                category_slug,
+                mode,
+                confidence,
+                reason,
+                model,
+            )?;
+            fs::remove_file(source).map_err(|error| {
+                format!("Failed to remove Bin symlink '{}': {}", source.display(), error)
+            })?;
+            return Ok(format!("Restored via Bin: {}", result));
+        }
+
+        if dest.exists() || dest.is_symlink() {
+            return Err(format!(
+                "Skill '{}' already exists in Shared Library category '{}'",
+                skill_name, category_slug
+            ));
+        }
+
+        copy_dir_recursive(&canonical_source, &dest)
+            .map_err(|error| format!("Failed to copy Bin symlink target: {}", error))?;
+        fs::remove_file(source).map_err(|error| {
+            format!("Failed to remove Bin symlink '{}': {}", source.display(), error)
+        })?;
+        dest
+    } else {
+        if dest.exists() || dest.is_symlink() {
+            return Err(format!(
+                "Skill '{}' already exists in Shared Library category '{}'",
+                skill_name, category_slug
+            ));
+        }
+
+        move_path_to_destination(source, &dest)?;
+        dest
+    };
+
+    write_skill_gate_metadata(
+        &final_path,
+        &SkillGateMetadata {
+            category_assignment: Some(CategoryAssignment {
+                mode: Some(mode),
+                slug: Some(category_slug.to_string()),
+                confidence,
+                classified_at: None,
+                reason,
+                model,
+            }),
+        },
+    )?;
+    let sync = sync_shared_skill_to_agents(
+        &final_path,
+        &skill_name,
+        None,
+        LocalConflictStrategy::Skip,
+    )?;
+
+    Ok(format_shared_sync_message(&skill_name, &sync))
+}
+
+fn remove_linked_agent_symlinks(canonical_path: &str, source_path: &str) -> Result<usize, String> {
+    let linked_paths = scan_all_skills_raw()
+        .into_iter()
+        .filter(|skill| {
+            skill.agent != "Shared Library"
+                && skill.agent != BIN_AGENT_NAME
+                && skill.is_symlink
+                && skill.canonical_path == canonical_path
+                && skill.path != source_path
+        })
+        .map(|skill| skill.path)
+        .collect::<Vec<_>>();
+
+    for linked_path in &linked_paths {
+        let linked = Path::new(linked_path);
+        if linked.is_symlink() {
+            fs::remove_file(linked).map_err(|error| {
+                format!(
+                    "Failed to remove linked symlink '{}': {}",
+                    linked.display(),
+                    error
+                )
+            })?;
+        }
+    }
+
+    Ok(linked_paths.len())
+}
+
+/// Move a skill out of an agent into the app Bin.
+pub fn move_skill_to_bin(skill_path: &str) -> Result<String, String> {
+    let path = Path::new(skill_path);
+
+    if !path.exists() && !path.is_symlink() {
+        return Err(format!("Path does not exist: {}", skill_path));
+    }
+
+    let skill_name = path
+        .file_name()
+        .unwrap_or_default()
+        .to_string_lossy()
+        .to_string();
+    let bin_root = get_bin_root()?;
+    fs::create_dir_all(&bin_root)
+        .map_err(|error| format!("Failed to create Bin folder: {}", error))?;
+    let dest = unique_bin_skill_path(&bin_root, &skill_name);
+
+    let shared_root = get_shared_library_root()?;
+    let raw_abs = if path.is_absolute() {
+        path.to_path_buf()
+    } else {
+        std::env::current_dir()
+            .map_err(|error| format!("Failed to resolve current directory: {}", error))?
+            .join(path)
+    };
+    let is_shared_source = is_path_in_shared_library(&raw_abs, &shared_root);
+    let canonical_path = fs::canonicalize(path).unwrap_or_else(|_| path.to_path_buf());
+    let canonical_string = canonical_path.to_string_lossy().to_string();
+    let removed_links = if is_shared_source {
+        remove_linked_agent_symlinks(&canonical_string, skill_path)?
+    } else {
+        0
+    };
+
+    move_path_to_destination(path, &dest)?;
+
+    if is_shared_source {
+        remove_empty_shared_parent_dir(path, &shared_root);
+    }
+
+    if removed_links > 0 {
+        Ok(format!(
+            "Moved '{}' to Bin and removed {} linked agent symlinks",
+            skill_name, removed_links
+        ))
+    } else {
+        Ok(format!("Moved '{}' to Bin", skill_name))
+    }
+}
+
 /// Uninstall (remove) a skill from an agent
 pub fn uninstall_skill(skill_path: &str) -> Result<String, String> {
     let path = Path::new(skill_path);
@@ -1861,7 +2230,13 @@ pub fn batch_migrate_skills(skills: Vec<SkillInfo>, target_agent: &str) -> Resul
             continue;
         }
 
-        let result = if skill.agent == "Shared Library" && target_agent != "Shared Library" {
+        let result = if skill.agent == BIN_AGENT_NAME {
+            if target_agent == "Shared Library" {
+                restore_bin_skill_to_shared_library(&skill.path)
+            } else {
+                restore_bin_skill_to_agent(&skill.path, target_agent)
+            }
+        } else if skill.agent == "Shared Library" && target_agent != "Shared Library" {
             move_shared_skill_to_agent_local(source_path, target_agent)
         } else {
             install_skill(&skill.path, target_agent)
@@ -1990,6 +2365,246 @@ mod tests {
             assert_eq!(
                 cursor_target.path,
                 home.join(".cursor").join("skills").to_string_lossy()
+            );
+        });
+    }
+
+    #[test]
+    fn bin_target_points_to_app_config_bin_directory() {
+        with_temp_home(|_home| {
+            let bin_target = get_agent_paths()
+                .into_iter()
+                .find(|target| target.name == "Bin")
+                .expect("missing Bin target");
+
+            assert!(
+                bin_target.path.ends_with("skill-gate/bin"),
+                "Bin target should live in the Skill Gate app config folder"
+            );
+        });
+    }
+
+    #[test]
+    fn bin_target_uses_configured_bin_directory() {
+        with_temp_home(|home| {
+            let custom_bin = home.join("CustomSkillBin");
+            settings::save_settings(&AppSettings {
+                bin_path: custom_bin.to_string_lossy().to_string(),
+                ..AppSettings::default()
+            })
+            .unwrap();
+
+            let bin_target = get_agent_paths()
+                .into_iter()
+                .find(|target| target.name == "Bin")
+                .expect("missing Bin target");
+
+            assert_eq!(bin_target.path, custom_bin.to_string_lossy());
+        });
+    }
+
+    #[test]
+    fn moving_skill_to_bin_uses_configured_bin_directory() {
+        with_temp_home(|home| {
+            let custom_bin = home.join("CustomSkillBin");
+            settings::save_settings(&AppSettings {
+                bin_path: custom_bin.to_string_lossy().to_string(),
+                ..AppSettings::default()
+            })
+            .unwrap();
+
+            let codex_dir = home.join(".codex").join("skills");
+            fs::create_dir_all(&codex_dir).unwrap();
+
+            let skill_path = codex_dir.join("move-to-custom-bin");
+            create_skill(&skill_path);
+
+            move_skill_to_bin(skill_path.to_string_lossy().as_ref()).unwrap();
+
+            assert!(
+                custom_bin.join("move-to-custom-bin").exists(),
+                "moved skill should land in the configured Bin folder"
+            );
+        });
+    }
+
+    #[test]
+    fn moving_local_skill_to_bin_removes_original_and_scans_bin() {
+        with_temp_home(|home| {
+            let codex_dir = home.join(".codex").join("skills");
+            fs::create_dir_all(&codex_dir).unwrap();
+
+            let skill_path = codex_dir.join("remove-me");
+            create_skill(&skill_path);
+
+            move_skill_to_bin(skill_path.to_string_lossy().as_ref()).unwrap();
+
+            assert!(!skill_path.exists(), "original skill should leave Codex");
+
+            let bin_skill = scan_all_skills_raw()
+                .into_iter()
+                .find(|skill| skill.agent == "Bin" && skill.name == "remove-me")
+                .expect("moved skill should be visible in Bin");
+
+            assert!(Path::new(&bin_skill.path).exists());
+            assert!(!bin_skill.is_symlink);
+        });
+    }
+
+    #[test]
+    fn moving_agent_symlink_to_bin_keeps_shared_source() {
+        with_temp_home(|home| {
+            let shared_dir = home.join("SharedSkills");
+            let codex_dir = home.join(".codex").join("skills");
+            fs::create_dir_all(&shared_dir).unwrap();
+            fs::create_dir_all(&codex_dir).unwrap();
+
+            let shared_skill = shared_dir.join("linked-skill");
+            create_skill(&shared_skill);
+            let codex_link = codex_dir.join("linked-skill");
+            symlink_dir(&shared_skill, &codex_link);
+
+            move_skill_to_bin(codex_link.to_string_lossy().as_ref()).unwrap();
+
+            assert!(shared_skill.exists(), "shared source should remain");
+            assert!(
+                !codex_link.exists() && !codex_link.is_symlink(),
+                "agent symlink should leave Codex"
+            );
+
+            let bin_skill = scan_all_skills_raw()
+                .into_iter()
+                .find(|skill| skill.agent == "Bin" && skill.name == "linked-skill")
+                .expect("moved symlink should be visible in Bin");
+
+            assert!(bin_skill.is_symlink);
+            assert_eq!(
+                bin_skill.canonical_path,
+                fs::canonicalize(&shared_skill)
+                    .unwrap()
+                    .to_string_lossy()
+                    .to_string()
+            );
+        });
+    }
+
+    #[test]
+    fn moving_shared_skill_to_bin_removes_agent_symlinks() {
+        with_temp_home(|home| {
+            let shared_dir = home.join("SharedSkills");
+            let claude_dir = home.join(".claude").join("skills");
+            let codex_dir = home.join(".codex").join("skills");
+            fs::create_dir_all(&shared_dir).unwrap();
+            fs::create_dir_all(&claude_dir).unwrap();
+            fs::create_dir_all(&codex_dir).unwrap();
+
+            let shared_skill = shared_dir.join("shared-remove");
+            create_skill(&shared_skill);
+            let claude_link = claude_dir.join("shared-remove");
+            let codex_link = codex_dir.join("shared-remove");
+            symlink_dir(&shared_skill, &claude_link);
+            symlink_dir(&shared_skill, &codex_link);
+
+            move_skill_to_bin(shared_skill.to_string_lossy().as_ref()).unwrap();
+
+            assert!(
+                !shared_skill.exists(),
+                "shared source should move out of Shared Library"
+            );
+            assert!(
+                !claude_link.exists() && !claude_link.is_symlink(),
+                "Claude symlink should be removed"
+            );
+            assert!(
+                !codex_link.exists() && !codex_link.is_symlink(),
+                "Codex symlink should be removed"
+            );
+
+            let bin_skill = scan_all_skills_raw()
+                .into_iter()
+                .find(|skill| skill.agent == "Bin" && skill.name == "shared-remove")
+                .expect("shared skill should be visible in Bin");
+
+            assert!(!bin_skill.is_symlink);
+        });
+    }
+
+    #[test]
+    fn restoring_bin_skill_to_agent_moves_out_of_bin() {
+        with_temp_home(|home| {
+            let bin_dir = home.join("SkillBin");
+            settings::save_settings(&AppSettings {
+                bin_path: bin_dir.to_string_lossy().to_string(),
+                ..AppSettings::default()
+            })
+            .unwrap();
+
+            let codex_dir = home.join(".codex").join("skills");
+            fs::create_dir_all(&codex_dir).unwrap();
+            fs::create_dir_all(&bin_dir).unwrap();
+
+            let bin_skill = bin_dir.join("restore-me");
+            create_skill(&bin_skill);
+
+            batch_migrate_skills(
+                vec![SkillInfo {
+                    name: String::from("restore-me"),
+                    description: String::new(),
+                    path: bin_skill.to_string_lossy().to_string(),
+                    canonical_path: bin_skill.to_string_lossy().to_string(),
+                    agent: String::from(BIN_AGENT_NAME),
+                    is_symlink: false,
+                    category: None,
+                    category_assignment_mode: None,
+                    category_confidence: None,
+                    category_classified_at: None,
+                    version: None,
+                    source: None,
+                }],
+                "Codex",
+            )
+            .unwrap();
+
+            assert!(
+                !bin_skill.exists(),
+                "restored skill should be removed from Bin"
+            );
+            assert!(
+                codex_dir.join("restore-me").exists(),
+                "restored skill should move to the target agent"
+            );
+        });
+    }
+
+    #[test]
+    fn restoring_bin_skill_to_shared_category_moves_out_of_bin() {
+        with_temp_home(|home| {
+            let bin_dir = home.join("SkillBin");
+            let shared_dir = home.join("SharedSkills");
+            settings::save_settings(&AppSettings {
+                bin_path: bin_dir.to_string_lossy().to_string(),
+                shared_library_path: shared_dir.to_string_lossy().to_string(),
+                ..AppSettings::default()
+            })
+            .unwrap();
+
+            fs::create_dir_all(&bin_dir).unwrap();
+            let bin_skill = bin_dir.join("restore-shared");
+            create_skill(&bin_skill);
+
+            install_skill_to_shared_category(
+                bin_skill.to_string_lossy().as_ref(),
+                "data-analysis",
+            )
+            .unwrap();
+
+            assert!(
+                !bin_skill.exists(),
+                "restored shared skill should be removed from Bin"
+            );
+            assert!(
+                shared_dir.join("data-analysis").join("restore-shared").exists(),
+                "restored skill should move into the target Shared Library category"
             );
         });
     }

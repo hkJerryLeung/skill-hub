@@ -57,6 +57,10 @@ assert.deepStrictEqual(
   ["remove"],
 );
 assert.deepStrictEqual(
+  singleSkillMenu.danger.map((item) => item.label),
+  ["Move to Bin"],
+);
+assert.deepStrictEqual(
   Object.keys(singleSkillMenu).sort(),
   ["danger", "primary"],
   "skill menu should only expose primary and danger sections",
@@ -97,6 +101,27 @@ assert.deepStrictEqual(
   Object.keys(batchSkillMenu).sort(),
   ["danger", "primary"],
   "batch skill menu should only expose primary and danger sections",
+);
+
+const binSkillMenu = buildSkillMenuItems({
+  selectedSkills: [
+    {
+      name: "removed-demo",
+      path: "/bin/removed-demo",
+      canonical_path: "/bin/removed-demo",
+      agent: "Bin",
+      is_symlink: false,
+    },
+  ],
+});
+
+assert.deepStrictEqual(
+  binSkillMenu.danger.map((item) => item.id),
+  ["delete-permanently"],
+);
+assert.deepStrictEqual(
+  binSkillMenu.danger.map((item) => item.label),
+  ["Delete Permanently"],
 );
 
 console.log("contextMenuModel test passed");

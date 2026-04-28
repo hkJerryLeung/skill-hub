@@ -14,12 +14,17 @@ const discoverItemsMatch = sidebarSource.match(/const DISCOVER_ITEMS[\s\S]*?\];/
 assert.ok(discoverItemsMatch, "Expected Sidebar to define Discover items");
 assert.match(
   discoverItemsMatch[0],
-  /\{ key: "AI Skill Scout", label: "AI Skill Scout"/,
-  "Expected AI Skill Scout to be listed in Discover",
+  /\{ key: "AI Install", label: "AI Install"/,
+  "Expected AI Install to be listed in Discover",
 );
 assert.ok(
-  discoverItemsMatch[0].indexOf("AI Skill Scout") < discoverItemsMatch[0].indexOf("huggingface"),
-  "Expected AI Skill Scout to be the first Discover item",
+  discoverItemsMatch[0].indexOf("AI Install") < discoverItemsMatch[0].indexOf("Install via GitHub"),
+  "Expected AI Install to be the first Discover item",
+);
+assert.doesNotMatch(
+  discoverItemsMatch[0],
+  /huggingface|skills\.sh|skillsmp\.com|skillsmap\.com/,
+  "Expected external market sources to be removed from Discover",
 );
 
 assert.match(
@@ -29,13 +34,23 @@ assert.match(
 );
 assert.match(
   marketViewSource,
-  /Ask local model/,
-  "Expected AI Skill Scout to render a chat submit action",
+  /ai-install-composer/,
+  "Expected AI Install to render a chat-style composer",
+);
+assert.match(
+  marketViewSource,
+  /Model settings/,
+  "Expected AI Install to expose model settings from the top-right action",
+);
+assert.match(
+  marketViewSource,
+  /ai-install-settings-dialog/,
+  "Expected AI Install model settings to render in a dialog",
 );
 assert.match(
   marketViewSource,
   /Install to Shared Library/,
-  "Expected AI Skill Scout recommendations to install into Shared Library",
+  "Expected AI Install recommendations to install into Shared Library",
 );
 
 console.log("aiSkillScoutMarkup test passed");

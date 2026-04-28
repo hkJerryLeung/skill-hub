@@ -46,7 +46,10 @@ struct DownloadedRepository {
     branch: String,
 }
 
-pub fn fetch_remote_market(source: &str, force_refresh: bool) -> Result<Vec<RemoteMarketEntry>, String> {
+pub fn fetch_remote_market(
+    source: &str,
+    force_refresh: bool,
+) -> Result<Vec<RemoteMarketEntry>, String> {
     if !force_refresh {
         if let Some(cached) = read_cache(source) {
             return Ok(cached);

@@ -6,6 +6,7 @@ assert.equal(resolveSidebarDropTargetKey("Claude Code"), "Claude Code");
 assert.equal(resolveSidebarDropTargetKey("Antigravity"), "Antigravity");
 assert.equal(resolveSidebarDropTargetKey("Codex"), "Codex");
 assert.equal(resolveSidebarDropTargetKey("Cursor"), "Cursor");
+assert.equal(resolveSidebarDropTargetKey("Bin"), "Bin");
 assert.equal(resolveSidebarDropTargetKey("shared-category:data-analysis"), null);
 assert.equal(resolveSidebarDropTargetKey("all"), null);
 assert.equal(resolveSidebarDropTargetKey("unknown"), null);

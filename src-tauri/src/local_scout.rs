@@ -3,7 +3,7 @@ use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
 use std::time::Duration;
 
-const SCOUT_SYSTEM_PROMPT: &str = "You are AI Skill Scout inside Skill Gate. Help the user find existing GitHub-hosted AI agent skills. Return strict JSON only. The JSON shape is {\"message\":\"short answer\",\"recommendations\":[{\"title\":\"skill title\",\"github_url\":\"https://github.com/owner/repo or tree URL\",\"skill_name\":\"optional folder or skill id\",\"reason\":\"why this fits\",\"confidence\":0.0}]}. Recommend only GitHub URLs. If you are unsure, say so in message and return fewer recommendations.";
+const SCOUT_SYSTEM_PROMPT: &str = "You are AI Install inside Skill Gate. Help the user find existing GitHub-hosted AI agent skills. Return strict JSON only. The JSON shape is {\"message\":\"short answer\",\"recommendations\":[{\"title\":\"skill title\",\"github_url\":\"https://github.com/owner/repo or tree URL\",\"skill_name\":\"optional folder or skill id\",\"reason\":\"why this fits\",\"confidence\":0.0}]}. Recommend only GitHub URLs. If you are unsure, say so in message and return fewer recommendations.";
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct LocalSkillModel {
@@ -122,9 +122,7 @@ pub fn chat_with_local_skill_scout(
 ) -> Result<SkillScoutResponse, String> {
     let prompt = request.prompt.trim();
     if prompt.is_empty() {
-        return Err(String::from(
-            "Ask AI Skill Scout what kind of skill you need",
-        ));
+        return Err(String::from("Ask AI Install what kind of skill you need"));
     }
     if request.model.trim().is_empty() {
         return Err(String::from("Choose or enter a local model first"));
@@ -315,10 +313,10 @@ fn extract_json_payload(raw: &str) -> Result<String, String> {
 
     let start = without_fence
         .find('{')
-        .ok_or_else(|| String::from("AI Skill Scout response did not include JSON"))?;
+        .ok_or_else(|| String::from("AI Install response did not include JSON"))?;
     let end = without_fence
         .rfind('}')
-        .ok_or_else(|| String::from("AI Skill Scout response did not include complete JSON"))?;
+        .ok_or_else(|| String::from("AI Install response did not include complete JSON"))?;
 
     Ok(without_fence[start..=end].to_string())
 }

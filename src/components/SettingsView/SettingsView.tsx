@@ -21,6 +21,7 @@ const STARTUP_VIEW_OPTIONS: AppSettings["startup_view"][] = [
   "Antigravity",
   "Codex",
   "Cursor",
+  "Bin",
 ];
 
 const STATUS_FILTER_OPTIONS: AppSettings["startup_status_filter"][] = [
@@ -44,6 +45,7 @@ interface SettingsViewProps {
     value: AppSettings[K],
   ) => void;
   onBrowseSharedLibrary: () => void;
+  onBrowseBin: () => void;
   onSave: () => void;
   onCancel: () => void;
   onLoadDefaults: () => void;
@@ -74,6 +76,7 @@ export function SettingsView({
   appUpdateState,
   onSettingsChange,
   onBrowseSharedLibrary,
+  onBrowseBin,
   onSave,
   onCancel,
   onLoadDefaults,
@@ -98,8 +101,8 @@ export function SettingsView({
           <div className="settings-eyebrow">Application Preferences</div>
           <h1>Settings</h1>
           <p>
-            Manage app-wide behavior, startup defaults, local cache, and the
-            Shared Library folder location.
+            Manage app-wide behavior, startup defaults, local cache, and folder
+            locations.
           </p>
         </div>
         <div className={`settings-dirty-pill ${dirty ? "dirty" : ""}`}>
@@ -135,6 +138,27 @@ export function SettingsView({
                 type="button"
                 className="settings-secondary-btn"
                 onClick={onBrowseSharedLibrary}
+              >
+                Browse
+              </button>
+            </div>
+          </label>
+
+          <label className="settings-field">
+            <span>Bin Folder</span>
+            <div className="settings-path-row">
+              <input
+                type="text"
+                value={draftSettings.bin_path}
+                onChange={(event) =>
+                  onSettingsChange("bin_path", event.target.value)
+                }
+                placeholder="/absolute/path/to/SkillBin"
+              />
+              <button
+                type="button"
+                className="settings-secondary-btn"
+                onClick={onBrowseBin}
               >
                 Browse
               </button>

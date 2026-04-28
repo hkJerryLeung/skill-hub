@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
-import { open } from "@tauri-apps/plugin-dialog";
+import { confirm as confirmDialog, open } from "@tauri-apps/plugin-dialog";
 import { revealItemInDir } from "@tauri-apps/plugin-opener";
 import { relaunch } from "@tauri-apps/plugin-process";
 import { check, type DownloadEvent, type Update } from "@tauri-apps/plugin-updater";
@@ -23,7 +23,7 @@ import {
 import { ContextMenu, type ContextMenuSection } from "./components/ContextMenu/ContextMenu";
 import { Topbar } from "./components/Topbar/Topbar";
 import { SkillGrid, type SelectionBox } from "./components/SkillGrid/SkillGrid";
-import { DetailPanel } from "./components/DetailPanel/DetailPanel";
+import { SkillFlowView } from "./components/SkillFlow/SkillFlowView";
 import { MarketView } from "./components/MarketView/MarketView";
 import { SettingsView } from "./components/SettingsView/SettingsView";
 import {
@@ -39,7 +39,7 @@ import {
   type StatusFilter,
 } from "./lib/skillFilters";
 import { buildBrowserSkillPresentation } from "./lib/skillBrowserPresentation";
-import { getSkillId, matchesInstalledSkill } from "./lib/skillIdentity";
+import { getSkillId } from "./lib/skillIdentity";
 import { type SkillInfo } from "./lib/skillTypes";
 import { getTopbarRefreshState } from "./lib/topbarRefreshState";
 import { type AppUpdateState } from "./lib/appUpdatePresentation";
@@ -52,13 +52,13 @@ import {
 import {
   applyDocumentSettings,
   areSettingsEqual,
+  isInstallableTarget,
   resolveDefaultInstallTarget,
   resolveInitialBrowserState,
   type AgentTarget,
   type AppInfo,
   type AppSettings,
 } from "./lib/appSettings";
-import { type RemoteMarketEntry, type RemoteMarketSource } from "./lib/marketTypes";
 import type {
   LocalSkillModel,
   SkillScoutRecommendation,
@@ -142,21 +142,7 @@ function App() {
   const [statusFilter, setStatusFilter] = useState<StatusFilter>("all");
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [discoverView, setDiscoverView] = useState<DiscoverView | null>(null);
-  const [marketSearch, setMarketSearch] = useState("");
   const [marketTarget, setMarketTarget] = useState("");
-  const [marketEntries, setMarketEntries] = useState<Record<RemoteMarketSource, RemoteMarketEntry[]>>({
-    huggingface: [],
-    "skills.sh": [],
-  });
-  const [marketLoading, setMarketLoading] = useState<Record<RemoteMarketSource, boolean>>({
-    huggingface: false,
-    "skills.sh": false,
-  });
-  const [marketErrors, setMarketErrors] = useState<Record<RemoteMarketSource, string | null>>({
-    huggingface: null,
-    "skills.sh": null,
-  });
-  const [installingMarketKey, setInstallingMarketKey] = useState<string | null>(null);
   const [githubInstallUrl, setGithubInstallUrl] = useState("");
   const [githubInstallSkillName, setGithubInstallSkillName] = useState("");
   const [githubInstalling, setGithubInstalling] = useState(false);
@@ -167,6 +153,7 @@ function App() {
   const [localScoutBaseUrl, setLocalScoutBaseUrl] = useState("http://localhost:1234/v1");
   const [localScoutModel, setLocalScoutModel] = useState("");
   const [localScoutPrompt, setLocalScoutPrompt] = useState("");
+  const [localScoutLastPrompt, setLocalScoutLastPrompt] = useState("");
   const [localScoutResponse, setLocalScoutResponse] = useState<SkillScoutResponse | null>(null);
   const [localScoutLoading, setLocalScoutLoading] = useState(false);
   const [localScoutError, setLocalScoutError] = useState<string | null>(null);
@@ -217,8 +204,7 @@ function App() {
   const settingsDirty =
     appSettings && settingsDraft ? !areSettingsEqual(appSettings, settingsDraft) : false;
   const localBrowserOpen = !settingsOpen && discoverView === null;
-  const activeMarketSource: RemoteMarketSource | null =
-    discoverView === "huggingface" || discoverView === "skills.sh" ? discoverView : null;
+  const installTargets = targets.filter(isInstallableTarget);
 
   const showToast = (message: string, type: "success" | "error") => {
     setToast({ message, type });
@@ -227,6 +213,41 @@ function App() {
 
   const closeContextMenu = () => {
     setContextMenu(null);
+  };
+
+  const resolveCurrentDropTargetAtPoint = (
+    clientX: number,
+    clientY: number,
+  ): DragSidebarTarget | null => {
+    const sidebarRows = Array.from(
+      document.querySelectorAll<HTMLElement>("[data-agent-key]"),
+    ).map((row) => {
+      const rect = row.getBoundingClientRect();
+      return {
+        targetKey: row.dataset.agentKey,
+        left: rect.left,
+        right: rect.right,
+        top: rect.top,
+        bottom: rect.bottom,
+      };
+    });
+    const categoryRows = Array.from(
+      document.querySelectorAll<HTMLElement>("[data-drop-target]"),
+    ).map((row) => {
+      const rect = row.getBoundingClientRect();
+      return {
+        targetKey: row.dataset.dropTarget,
+        left: rect.left,
+        right: rect.right,
+        top: rect.top,
+        bottom: rect.bottom,
+      };
+    });
+
+    return resolveDropTargetFromPoint([...sidebarRows, ...categoryRows], {
+      clientX,
+      clientY,
+    });
   };
 
   const openContextMenu = (
@@ -345,7 +366,7 @@ function App() {
     enabled: boolean,
   ) => {
     if (!enabled) return true;
-    return window.confirm(message);
+    return confirmDialog(message, { title: "Skill Gate", kind: "warning" });
   };
 
   useEffect(() => {
@@ -422,9 +443,17 @@ function App() {
   }, [appSettings]);
 
   useEffect(() => {
-    if (marketTarget !== "" || targets.length === 0) return;
+    const nextInstallTargets = targets.filter(isInstallableTarget);
+    const defaultTarget = resolveDefaultInstallTarget(targets);
+    if (defaultTarget === "") return;
+    if (
+      marketTarget !== "" &&
+      nextInstallTargets.some((target) => target.name === marketTarget)
+    ) {
+      return;
+    }
 
-    setMarketTarget(resolveDefaultInstallTarget(targets));
+    setMarketTarget(defaultTarget);
   }, [targets, marketTarget]);
 
   useEffect(() => {
@@ -446,23 +475,6 @@ function App() {
 
     return () => window.clearTimeout(timeout);
   }, [appSettings?.restore_last_session, filter, search, statusFilter]);
-
-  const loadRemoteMarket = async (source: RemoteMarketSource, forceRefresh = false) => {
-    setMarketLoading((current) => ({ ...current, [source]: true }));
-    setMarketErrors((current) => ({ ...current, [source]: null }));
-
-    try {
-      const nextEntries = await invoke<RemoteMarketEntry[]>("fetch_remote_market", {
-        source,
-        forceRefresh,
-      });
-      setMarketEntries((current) => ({ ...current, [source]: nextEntries }));
-    } catch (error) {
-      setMarketErrors((current) => ({ ...current, [source]: String(error) }));
-    } finally {
-      setMarketLoading((current) => ({ ...current, [source]: false }));
-    }
-  };
 
   const applyLocalScoutModel = (model: LocalSkillModel) => {
     setLocalScoutModelId(model.id);
@@ -517,16 +529,7 @@ function App() {
   };
 
   useEffect(() => {
-    if (!activeMarketSource) return;
-    if (marketEntries[activeMarketSource].length > 0) return;
-    if (marketLoading[activeMarketSource]) return;
-    if (marketErrors[activeMarketSource] !== null) return;
-
-    void loadRemoteMarket(activeMarketSource);
-  }, [activeMarketSource, marketEntries, marketLoading, marketErrors]);
-
-  useEffect(() => {
-    if (discoverView !== "AI Skill Scout") return;
+    if (discoverView !== "AI Install") return;
     if (localScoutModels.length > 0 || localScoutDetecting) return;
 
     void loadLocalScoutModels();
@@ -538,35 +541,10 @@ function App() {
     }
 
     const handleWindowDragOver = (event: DragEvent) => {
-      const sidebarRows = Array.from(
-        document.querySelectorAll<HTMLElement>("[data-agent-key]"),
-      ).map((row) => {
-        const rect = row.getBoundingClientRect();
-        return {
-          targetKey: row.dataset.agentKey,
-          left: rect.left,
-          right: rect.right,
-          top: rect.top,
-          bottom: rect.bottom,
-        };
-      });
-      const categoryRows = Array.from(
-        document.querySelectorAll<HTMLElement>("[data-drop-target]"),
-      ).map((row) => {
-        const rect = row.getBoundingClientRect();
-        return {
-          targetKey: row.dataset.dropTarget,
-          left: rect.left,
-          right: rect.right,
-          top: rect.top,
-          bottom: rect.bottom,
-        };
-      });
-
-      const nextTarget = resolveDropTargetFromPoint([...sidebarRows, ...categoryRows], {
-        clientX: event.clientX,
-        clientY: event.clientY,
-      });
+      const nextTarget = resolveCurrentDropTargetAtPoint(
+        event.clientX,
+        event.clientY,
+      );
 
       if (nextTarget) {
         event.preventDefault();
@@ -748,6 +726,23 @@ function App() {
   ) => {
     if (targetKey === "all" || migrationInFlightRef.current) return;
 
+    if (targetKey === "Bin") {
+      const batch = getDraggedSkillBatch(!!options?.allowSelectedFallback);
+      const movableBatch = batch.filter((skill) => skill.agent !== "Bin");
+
+      if (batch.length === 0) return;
+      if (movableBatch.length === 0) {
+        draggedBatchRef.current = [];
+        showToast("Selected skills are already in Bin", "error");
+        return;
+      }
+
+      await executeMoveToBinBatch(movableBatch);
+      draggedBatchRef.current = [];
+      currentDropTargetRef.current = null;
+      return;
+    }
+
     const sharedCategory = getSharedCategoryFromTarget(targetKey);
     if (sharedCategory) {
       const batch = getDraggedSkillBatch(!!options?.allowSelectedFallback);
@@ -791,6 +786,59 @@ function App() {
     await executeMigrationBatch(movableBatch, targetKey as AgentFilter);
     draggedBatchRef.current = [];
     currentDropTargetRef.current = null;
+  };
+
+  const executeMoveToBinBatch = async (movableBatch: SkillInfo[]) => {
+    if (movableBatch.length === 0) return;
+
+    const shouldContinue = await confirmIfNeeded(
+      `Move ${movableBatch.length} skill${
+        movableBatch.length === 1 ? "" : "s"
+      } to Bin?`,
+      appSettings?.confirm_before_uninstall ?? true,
+    );
+    if (!shouldContinue) {
+      setDragOverTarget(null);
+      return;
+    }
+
+    migrationInFlightRef.current = true;
+    try {
+      let moved = 0;
+      const errors: string[] = [];
+      for (const skill of movableBatch) {
+        try {
+          await invoke<string>("move_skill_to_bin", {
+            skillPath: skill.path,
+          });
+          moved += 1;
+        } catch (error) {
+          errors.push(`'${skill.name}': ${String(error)}`);
+        }
+      }
+
+      if (moved > 0) {
+        showToast(
+          errors.length > 0
+            ? `Moved ${moved} skills to Bin (${errors.length} failed)`
+            : `Moved ${moved} skills to Bin`,
+          "success",
+        );
+      } else if (errors.length > 0) {
+        showToast(`Move to Bin failed: ${errors.join("; ")}`, "error");
+      }
+
+      const movedPaths = new Set(movableBatch.map((skill) => skill.path));
+      const selectedWasMoved = selected ? movedPaths.has(selected.path) : false;
+      if (selectedWasMoved) {
+        closeDetail();
+      }
+      setSelectedIds(new Set());
+      await refreshSkills({ reloadSelected: !selectedWasMoved && !!selected });
+      await refreshMeta();
+    } finally {
+      migrationInFlightRef.current = false;
+    }
   };
 
   const executeMigrationBatch = async (
@@ -944,35 +992,10 @@ function App() {
         setDragDebug(`pointer-start:${batch.length}`);
       }
 
-      const sidebarRows = Array.from(
-        document.querySelectorAll<HTMLElement>("[data-agent-key]"),
-      ).map((row) => {
-        const rect = row.getBoundingClientRect();
-        return {
-          targetKey: row.dataset.agentKey,
-          left: rect.left,
-          right: rect.right,
-          top: rect.top,
-          bottom: rect.bottom,
-        };
-      });
-      const categoryRows = Array.from(
-        document.querySelectorAll<HTMLElement>("[data-drop-target]"),
-      ).map((row) => {
-        const rect = row.getBoundingClientRect();
-        return {
-          targetKey: row.dataset.dropTarget,
-          left: rect.left,
-          right: rect.right,
-          top: rect.top,
-          bottom: rect.bottom,
-        };
-      });
-
-      const nextTarget = resolveDropTargetFromPoint([...sidebarRows, ...categoryRows], {
-        clientX: event.clientX,
-        clientY: event.clientY,
-      });
+      const nextTarget = resolveCurrentDropTargetAtPoint(
+        event.clientX,
+        event.clientY,
+      );
 
       currentDropTargetRef.current = nextTarget;
       setDragPreview({
@@ -986,13 +1009,17 @@ function App() {
       }
     };
 
-    const handlePointerUp = () => {
+    const handlePointerUp = (event: MouseEvent) => {
       const pointerDrag = pointerDragRef.current;
       if (!pointerDrag) return;
 
       pointerDragRef.current = null;
 
       if (pointerDrag.started) {
+        currentDropTargetRef.current = resolveCurrentDropTargetAtPoint(
+          event.clientX,
+          event.clientY,
+        ) ?? currentDropTargetRef.current;
         suppressClickRef.current = true;
         handleDragEnd();
         return;
@@ -1014,50 +1041,6 @@ function App() {
       window.removeEventListener("mouseup", handlePointerUp);
     };
   }, [dragOverTarget, selectedIds, skills, appSettings]);
-
-  const handleInstallSpecific = async (skill: SkillInfo, targetAgent: string) => {
-    try {
-      const result = await invoke<string>("install_skill", {
-        sourcePath: skill.path,
-        targetAgent,
-      });
-      showToast(result, "success");
-      await refreshSkills({ reloadSelected: !!selected });
-      await refreshMeta();
-    } catch (err) {
-      showToast(String(err), "error");
-    }
-  };
-
-  const handleInstall = async (targetAgent: string) => {
-    if (!selected) return;
-    await handleInstallSpecific(selected, targetAgent);
-  };
-
-  const handleInstallMarketEntry = async (entry: RemoteMarketEntry) => {
-    if (marketTarget === "") return;
-
-    const marketKey = `${entry.repo}:${entry.skill_id}`;
-    setInstallingMarketKey(marketKey);
-    try {
-      const result = await invoke<string>("install_skill_from_github", {
-        githubUrl: entry.github_url,
-        targetAgent: marketTarget,
-        skillName: entry.skill_id,
-        marketSource: entry.source,
-        marketUrl: entry.market_url,
-      });
-      showToast(result, "success");
-      await Promise.all([
-        refreshSkills({ reloadSelected: !!selected }),
-        refreshMeta(),
-      ]);
-    } catch (error) {
-      showToast(String(error), "error");
-    } finally {
-      setInstallingMarketKey(null);
-    }
-  };
 
   const handleInstallGithub = async () => {
     const url = githubInstallUrl.trim();
@@ -1089,6 +1072,10 @@ function App() {
   };
 
   const handleAskLocalScout = async () => {
+    const prompt = localScoutPrompt.trim();
+    if (prompt === "") return;
+
+    setLocalScoutLastPrompt(prompt);
     setLocalScoutLoading(true);
     setLocalScoutError(null);
     try {
@@ -1097,7 +1084,7 @@ function App() {
           provider: localScoutProvider,
           base_url: localScoutBaseUrl,
           model: localScoutModel,
-          prompt: localScoutPrompt,
+          prompt,
         },
       });
       setLocalScoutResponse(response);
@@ -1111,8 +1098,9 @@ function App() {
   const handleInstallLocalScoutRecommendation = async (
     recommendation: SkillScoutRecommendation,
   ) => {
-    const confirmed = window.confirm(
+    const confirmed = await confirmDialog(
       `Install "${recommendation.title}" to Shared Library from ${recommendation.github_url}?`,
+      { title: "Skill Gate", kind: "info" },
     );
     if (!confirmed) return;
 
@@ -1124,7 +1112,7 @@ function App() {
         githubUrl: recommendation.github_url,
         targetAgent: "Shared Library",
         skillName: skillName === "" ? null : skillName,
-        marketSource: "AI Skill Scout",
+        marketSource: "AI Install",
         marketUrl: null,
       });
       showToast(result, "success");
@@ -1140,53 +1128,32 @@ function App() {
   };
 
   const handleRemoveSkill = async (skill: SkillInfo) => {
+    const isBinSkill = skill.agent === "Bin";
     const confirmed = await confirmIfNeeded(
-      `Remove "${skill.name}" from ${skill.agent}?${
-        skill.agent === "Shared Library"
-          ? " This will delete the shared source and remove linked symlinks from all agents."
-          : skill.is_symlink
-            ? " (SYMLINK only — source will not be deleted)"
-            : " This will delete all files permanently."
-      }`,
+      isBinSkill
+        ? `Delete "${skill.name}" permanently? This cannot be undone.`
+        : `Move "${skill.name}" from ${skill.agent} to Bin?${
+            skill.agent === "Shared Library"
+              ? " Linked agent symlinks will be removed."
+              : skill.is_symlink
+                ? " The source will stay where it is."
+                : ""
+          }`,
       appSettings?.confirm_before_uninstall ?? true,
     );
     if (!confirmed) return;
 
     try {
-      const result = await invoke<string>("uninstall_skill", {
+      const command = isBinSkill ? "uninstall_skill" : "move_skill_to_bin";
+      const result = await invoke<string>(command, {
         skillPath: skill.path,
       });
       showToast(result, "success");
-      if (selected?.path === skill.path) {
+      const wasSelected = selected?.path === skill.path;
+      if (wasSelected) {
         closeDetail();
       }
-      await refreshSkills({ reloadSelected: !!selected });
-      await refreshMeta();
-    } catch (err) {
-      showToast(String(err), "error");
-    }
-  };
-
-  const handleUninstall = async () => {
-    if (!selected) return;
-    await handleRemoveSkill(selected);
-  };
-
-  const handleUninstallFromTarget = async (skillPath: string, isSymlink: boolean) => {
-    const confirmed = await confirmIfNeeded(
-      isSymlink
-        ? "Remove SYMLINK from this agent? (source will not be deleted)"
-        : "Remove this copied skill from this agent? This will delete its files permanently.",
-      appSettings?.confirm_before_uninstall ?? true,
-    );
-    if (!confirmed) return;
-
-    try {
-      const result = await invoke<string>("uninstall_skill", {
-        skillPath,
-      });
-      showToast(result, "success");
-      await refreshSkills({ reloadSelected: true });
+      await refreshSkills({ reloadSelected: !wasSelected && !!selected });
       await refreshMeta();
     } catch (err) {
       showToast(String(err), "error");
@@ -1228,6 +1195,23 @@ function App() {
 
       if (typeof selectedPath === "string") {
         handleSettingsChange("shared_library_path", selectedPath);
+      }
+    } catch (error) {
+      showToast(String(error), "error");
+    }
+  };
+
+  const handleBrowseBin = async () => {
+    if (!settingsDraft) return;
+    try {
+      const selectedPath = await open({
+        directory: true,
+        multiple: false,
+        defaultPath: settingsDraft.bin_path,
+      });
+
+      if (typeof selectedPath === "string") {
+        handleSettingsChange("bin_path", selectedPath);
       }
     } catch (error) {
       showToast(String(error), "error");
@@ -1501,8 +1485,7 @@ function App() {
     event: React.MouseEvent,
     view: DiscoverView,
   ) => {
-    const refreshable =
-      view === "AI Skill Scout" || view === "huggingface" || view === "skills.sh";
+    const refreshable = view === "AI Install";
     const items = buildDiscoverMenuItems({ view }).map((item) => ({
       ...item,
       disabled: item.id === "refresh-source" ? !refreshable : item.disabled,
@@ -1515,12 +1498,8 @@ function App() {
           return;
         }
         if (item.id === "refresh-source" && refreshable) {
-          if (view === "AI Skill Scout") {
+          if (view === "AI Install") {
             await loadLocalScoutModels();
-            return;
-          }
-          if (view === "huggingface" || view === "skills.sh") {
-            await loadRemoteMarket(view, true);
           }
         }
       },
@@ -1634,29 +1613,9 @@ function App() {
 
   const countByAgent = (agent: string) =>
     agent === "all"
-      ? skills.length
+      ? skills.filter((skill) => skill.agent !== "Bin").length
       : skills.filter((skill) => skill.agent === agent).length;
 
-  const agentStatuses = selected
-    ? targets
-        .filter((target) => target.name !== selected.agent)
-        .map((target) => {
-          const installedSkill = skills.find(
-            (skill) =>
-              skill.agent === target.name && matchesInstalledSkill(selected, skill),
-          );
-          return {
-            name: target.name,
-            installed: !!installedSkill,
-            skillPath: installedSkill?.path,
-            isSymlink: installedSkill?.is_symlink ?? false,
-          };
-        })
-    : [];
-
-  const currentMarketEntries = activeMarketSource ? marketEntries[activeMarketSource] : [];
-  const currentMarketLoading = activeMarketSource ? marketLoading[activeMarketSource] : false;
-  const currentMarketError = activeMarketSource ? marketErrors[activeMarketSource] : null;
   const topbarRefreshState = getTopbarRefreshState({
     loading,
   });
@@ -1757,6 +1716,7 @@ function App() {
               appUpdateState={appUpdateState}
               onSettingsChange={handleSettingsChange}
               onBrowseSharedLibrary={handleBrowseSharedLibrary}
+              onBrowseBin={handleBrowseBin}
               onSave={handleSaveSettings}
               onCancel={handleCancelSettings}
               onLoadDefaults={handleLoadDefaults}
@@ -1769,21 +1729,9 @@ function App() {
         ) : discoverView ? (
           <MarketView
             view={discoverView}
-            entries={currentMarketEntries}
-            loading={currentMarketLoading}
-            error={currentMarketError}
-            search={marketSearch}
-            setSearch={setMarketSearch}
             installTarget={marketTarget}
             setInstallTarget={setMarketTarget}
-            installTargets={targets}
-            onRefresh={() => {
-              if (activeMarketSource) {
-                void loadRemoteMarket(activeMarketSource, true);
-              }
-            }}
-            onInstallEntry={handleInstallMarketEntry}
-            installingEntryKey={installingMarketKey}
+            installTargets={installTargets}
             githubInstallUrl={githubInstallUrl}
             setGithubInstallUrl={setGithubInstallUrl}
             githubInstallSkillName={githubInstallSkillName}
@@ -1802,6 +1750,7 @@ function App() {
             setLocalScoutModel={handleLocalScoutModelChange}
             localScoutPrompt={localScoutPrompt}
             setLocalScoutPrompt={setLocalScoutPrompt}
+            localScoutLastPrompt={localScoutLastPrompt}
             localScoutResponse={localScoutResponse}
             localScoutLoading={localScoutLoading}
             localScoutError={localScoutError}
@@ -1879,16 +1828,13 @@ function App() {
       </main>
 
       {localBrowserOpen && (
-        <DetailPanel
+        <SkillFlowView
           selected={selected}
           contentLoading={contentLoading}
           skillContent={skillContent}
           skillFiles={skillFiles}
-          agentStatuses={agentStatuses}
           onClose={closeDetail}
-          onInstall={handleInstall}
-          onUninstall={handleUninstall}
-          onUninstallFromTarget={handleUninstallFromTarget}
+          onRemove={handleRemoveSkill}
         />
       )}
 

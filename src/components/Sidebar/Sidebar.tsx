@@ -7,16 +7,15 @@ import {
   OpenAIIcon,
   CursorIcon,
   SettingsIcon,
-  DownloadIcon,
-  GlobeIcon,
   GithubIcon,
   SparkIcon,
+  TrashIcon,
 } from '../Icons/Icons';
 import { resolveSidebarDropTargetKey } from '../../lib/dragDropState';
 import './Sidebar.css';
 
-export type AgentFilter = "all" | "Claude Code" | "Antigravity" | "Codex" | "Cursor" | "Shared Library";
-export type DiscoverView = "AI Skill Scout" | "huggingface" | "skills.sh" | "skillsmp.com" | "Install via GitHub";
+export type AgentFilter = "all" | "Claude Code" | "Antigravity" | "Codex" | "Cursor" | "Shared Library" | "Bin";
+export type DiscoverView = "AI Install" | "Install via GitHub";
 export type SidebarItem = AgentFilter | DiscoverView | "settings";
 
 const AGENTS: { key: AgentFilter; label: string; Icon: React.FC<any>; color?: string }[] = [
@@ -26,13 +25,11 @@ const AGENTS: { key: AgentFilter; label: string; Icon: React.FC<any>; color?: st
   { key: "Antigravity", label: "Antigravity", Icon: GeminiIcon },
   { key: "Codex", label: "Codex", Icon: OpenAIIcon },
   { key: "Cursor", label: "Cursor", Icon: CursorIcon },
+  { key: "Bin", label: "Bin", Icon: TrashIcon },
 ];
 
 const DISCOVER_ITEMS: { key: DiscoverView; label: string; Icon: React.FC<any> }[] = [
-  { key: "AI Skill Scout", label: "AI Skill Scout", Icon: SparkIcon },
-  { key: "huggingface", label: "huggingface", Icon: DownloadIcon },
-  { key: "skills.sh", label: "skills.sh", Icon: GlobeIcon },
-  { key: "skillsmp.com", label: "skillsmp.com", Icon: GlobeIcon },
+  { key: "AI Install", label: "AI Install", Icon: SparkIcon },
   { key: "Install via GitHub", label: "Install via GitHub", Icon: GithubIcon },
 ];
 

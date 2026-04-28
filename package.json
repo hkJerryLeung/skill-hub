@@ -6,6 +6,9 @@
   "scripts": {
     "dev": "vite",
     "build": "tsc && vite build",
+    "test": "npm run test:legacy && npm run test:unit",
+    "test:legacy": "for file in tests/*.test.mjs; do node \"$file\"; done",
+    "test:unit": "vitest run src/lib/skillFlowPresentation.test.ts",
     "preview": "vite preview",
     "tauri": "tauri"
   },
@@ -15,6 +18,7 @@
     "@tauri-apps/plugin-opener": "^2",
     "@tauri-apps/plugin-process": "^2.3.1",
     "@tauri-apps/plugin-updater": "^2.10.1",
+    "@xyflow/react": "^12.10.2",
     "react": "^19.1.0",
     "react-dom": "^19.1.0"
   },
@@ -24,6 +28,7 @@
     "@types/react-dom": "^19.1.6",
     "@vitejs/plugin-react": "^4.6.0",
     "typescript": "~5.8.3",
-    "vite": "^7.0.4"
+    "vite": "^7.0.4",
+    "vitest": "^4.1.5"
   }
 }

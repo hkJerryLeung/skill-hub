@@ -5,6 +5,7 @@ export type ThemeMode = "system" | "dark" | "light";
 
 export interface AppSettings {
   shared_library_path: string;
+  bin_path: string;
   theme_mode: ThemeMode;
   reduce_motion: boolean;
   categorization_enabled: boolean;
@@ -39,16 +40,21 @@ export interface AppInfo {
   session_path: string;
 }
 
+export const isInstallableTarget = (target: AgentTarget): boolean =>
+  target.name !== "Bin";
+
 export const resolveDefaultInstallTarget = (
   targets: AgentTarget[],
 ): string => {
-  if (targets.length === 0) {
+  const installableTargets = targets.filter(isInstallableTarget);
+
+  if (installableTargets.length === 0) {
     return "";
   }
 
   return (
-    targets.find((target) => target.name === "Shared Library")?.name ??
-    targets[0].name
+    installableTargets.find((target) => target.name === "Shared Library")?.name ??
+    installableTargets[0].name
   );
 };
 
@@ -96,6 +102,7 @@ export const areSettingsEqual = (
   right: AppSettings,
 ): boolean =>
   left.shared_library_path === right.shared_library_path &&
+  left.bin_path === right.bin_path &&
   left.theme_mode === right.theme_mode &&
   left.reduce_motion === right.reduce_motion &&
   left.categorization_enabled === right.categorization_enabled &&

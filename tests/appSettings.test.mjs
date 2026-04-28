@@ -8,6 +8,7 @@ import {
 
 const baseSettings = {
   shared_library_path: "/Users/example/SharedSkills",
+  bin_path: "/Users/example/.config/skill-gate/bin",
   theme_mode: "system",
   reduce_motion: false,
   categorization_enabled: false,
@@ -69,6 +70,15 @@ assert.equal(
 );
 
 assert.equal(
+  areSettingsEqual(baseSettings, {
+    ...baseSettings,
+    bin_path: "/Volumes/SkillsBin",
+  }),
+  false,
+  "dirty Bin folder changes must be detectable for Save/Cancel UX",
+);
+
+assert.equal(
   resolveDefaultInstallTarget([
     { name: "Codex", path: "/Users/example/.codex/skills", exists: true },
     {
@@ -79,6 +89,23 @@ assert.equal(
   ]),
   "Shared Library",
   "market installs should default to the Shared Library when available",
+);
+
+assert.equal(
+  resolveDefaultInstallTarget([
+    { name: "Bin", path: "/Users/example/.config/skill-gate/bin", exists: true },
+    { name: "Codex", path: "/Users/example/.codex/skills", exists: true },
+  ]),
+  "Codex",
+  "market installs should never default to the Bin target",
+);
+
+assert.equal(
+  resolveDefaultInstallTarget([
+    { name: "Bin", path: "/Users/example/.config/skill-gate/bin", exists: true },
+  ]),
+  "",
+  "Bin alone is not an installable target",
 );
 
 assert.equal(

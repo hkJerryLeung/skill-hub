@@ -2,9 +2,8 @@ import './SkillGrid.css';
 import { SearchIcon } from '../Icons/Icons'; // We'll use SearchIcon for the empty state
 import { getSkillId } from '../../lib/skillIdentity';
 import type { SharedCategoryPresentation } from '../../lib/skillListPresentation';
-import { getSharedLibraryCategoryLabel } from '../../lib/sharedLibraryCategories';
-import { getVersionLabel } from '../../lib/updatePresentation';
-import { SkillInfo } from '../../lib/skillTypes';
+import { buildSkillPurposeComparison } from '../../lib/skillPurposePresentation';
+import type { SkillInfo } from '../../lib/skillTypes';
 
 export interface SelectionBox {
   startX: number;
@@ -54,11 +53,12 @@ export function SkillGrid({
   onSharedCategoryDragLeave,
   onSharedCategoryDrop,
 }: SkillGridProps) {
-  const renderSkillCards = (skills: SkillInfo[]) =>
+  const renderSkillRows = (skills: SkillInfo[]) =>
     skills.map((skill) => {
       const id = getSkillId(skill);
       const isSelected = selectedIds.has(id);
       const isDetailActive = activeDetailId === id;
+      const purpose = buildSkillPurposeComparison(skill);
 
       return (
         <div
@@ -66,40 +66,44 @@ export function SkillGrid({
             if (el) cardRefs.current.set(id, el);
             else cardRefs.current.delete(id);
           }}
-          className={`skill-card ${isSelected ? "multi-selected" : ""} ${
-            isDetailActive ? "selected" : ""
-          }`}
+          className={`skill-card skill-list-row ${skill.is_symlink ? "symlink-skill" : ""} ${
+            !isSharedLibraryView ? "non-shared-skill" : ""
+          } ${isSelected ? "multi-selected" : ""} ${isDetailActive ? "selected" : ""}`}
           key={id}
           onClick={(e) => onCardClick(e, skill)}
           onMouseDown={(e) => onCardMouseDown(e, skill)}
           onContextMenu={(e) => onCardContextMenu(e, skill)}
+          role="row"
         >
-          <div className="skill-card-header">
-            <span className="skill-card-name">{skill.name}</span>
-            <span
-              className={`skill-card-badge ${
-                skill.is_symlink ? "symlink" : "local"
-              }`}
-            >
-              {skill.is_symlink ? "SYMLINK" : "LOCAL"}
-            </span>
-          </div>
-          <div className="skill-card-desc">{skill.description}</div>
-          <div className="skill-card-footer">
-            <div className="skill-card-footer-left">
-              {(skill.category ?? (skill.agent === "Shared Library" ? "uncategorized" : null)) && (
-                <span className="skill-card-category">
-                  {getSharedLibraryCategoryLabel(
-                    skill.category ?? (skill.agent === "Shared Library" ? "uncategorized" : null),
-                  ) ?? skill.category}
-                </span>
-              )}
+          <div className="skill-list-cell skill-list-skill" role="cell">
+            <span className="skill-list-cell-label">Skill</span>
+            <div className="skill-card-header">
+              <span className="skill-card-name">{skill.name}</span>
             </div>
-            <span className="skill-card-version">{getVersionLabel(skill)}</span>
+            <span className="skill-card-summary">{purpose.summary}</span>
+          </div>
+          <div className="skill-list-cell skill-list-before" role="cell">
+            <span className="skill-list-cell-label">Before</span>
+            <span className="skill-list-text">{purpose.before}</span>
+          </div>
+          <div className="skill-list-cell skill-list-after" role="cell">
+            <span className="skill-list-cell-label">After</span>
+            <span className="skill-list-text">{purpose.after}</span>
           </div>
         </div>
       );
     });
+
+  const renderSkillList = (skills: SkillInfo[], label: string) => (
+    <div className="skill-list" role="table" aria-label={label}>
+      <div className="skill-list-header" role="row">
+        <span className="skill-list-header-label" role="columnheader">Skill</span>
+        <span className="skill-list-header-label" role="columnheader">Before</span>
+        <span className="skill-list-header-label" role="columnheader">After</span>
+      </div>
+      {renderSkillRows(skills)}
+    </div>
+  );
 
   return (
     <div className="skill-grid-container" onMouseDown={onGridMouseDown}>
@@ -151,16 +155,14 @@ export function SkillGrid({
                   </span>
                 </button>
                 {!collapsed && (
-                  <div className="skill-grid">
-                    {renderSkillCards(group.skills)}
-                  </div>
+                  renderSkillList(group.skills, `${group.label} skills`)
                 )}
               </section>
             );
           })}
         </div>
       ) : (
-        <div className="skill-grid">{renderSkillCards(filtered)}</div>
+        renderSkillList(filtered, "Skills")
       )}
     </div>
   );

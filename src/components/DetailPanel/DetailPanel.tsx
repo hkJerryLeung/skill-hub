@@ -42,6 +42,8 @@ export function DetailPanel({
   onUninstallFromTarget,
 }: DetailPanelProps) {
   if (!selected) return null;
+  const removeLabel =
+    selected.agent === "Bin" ? "Delete Permanently" : `Move ${selected.name} to Bin`;
 
   const getBodyContent = (raw: string) => {
     if (raw.startsWith("---")) {
@@ -194,7 +196,7 @@ export function DetailPanel({
           <div className="danger-section">
             <div className="detail-section-label">Danger Zone</div>
             <button className="uninstall-btn" onClick={onUninstall}>
-              <TrashIcon size={14} className="btn-icon" /> Remove from {selected.agent}
+              <TrashIcon size={14} className="btn-icon" /> {removeLabel}
             </button>
           </div>
         </div>

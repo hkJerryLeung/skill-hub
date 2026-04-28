@@ -46,6 +46,15 @@ const localSkill = {
   version: null,
 };
 
+const binSkill = {
+  ...localSkill,
+  name: "removed-skill",
+  description: "Removed into Bin",
+  path: "/Users/example/Library/Application Support/skill-gate/bin/removed-skill",
+  canonical_path: "/Users/example/Library/Application Support/skill-gate/bin/removed-skill",
+  agent: "Bin",
+};
+
 const presentedAll = buildSkillPresentation(
   [sharedLocal, claudeSymlink, codexSymlink, localSkill],
   "all",
@@ -64,6 +73,33 @@ assert.deepStrictEqual(presentedAll.statusCounts, {
   symlinked: 1,
   local: 1,
 });
+
+const presentedAllWithBin = buildSkillPresentation(
+  [sharedLocal, claudeSymlink, codexSymlink, localSkill, binSkill],
+  "all",
+);
+
+assert.deepStrictEqual(
+  presentedAllWithBin.skills.map((skill) => skill.agent),
+  ["Shared Library", "Claude Code"],
+  "All Skills should exclude skills that are in Bin",
+);
+
+assert.deepStrictEqual(presentedAllWithBin.statusCounts, {
+  all: 2,
+  symlinked: 1,
+  local: 1,
+});
+
+const presentedBin = buildSkillPresentation(
+  [sharedLocal, claudeSymlink, codexSymlink, localSkill, binSkill],
+  "Bin",
+);
+
+assert.deepStrictEqual(
+  presentedBin.skills.map((skill) => [skill.name, skill.agent, skill.is_symlink]),
+  [["removed-skill", "Bin", false]],
+);
 
 const presentedSymlinked = buildSkillPresentation(
   [sharedLocal, claudeSymlink, codexSymlink, localSkill],

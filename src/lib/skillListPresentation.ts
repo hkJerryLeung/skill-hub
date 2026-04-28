@@ -158,7 +158,11 @@ export function buildSkillPresentation(
   statusFilter: StatusFilter = "all",
   selectedSharedCategories: ReadonlySet<string> = new Set<string>(),
 ): SkillPresentation {
-  const groups = buildGroups(skills);
+  const presentationSkills =
+    agentFilter === "Bin"
+      ? skills
+      : skills.filter((skill) => skill.agent !== "Bin");
+  const groups = buildGroups(presentationSkills);
   const emptySharedCategoryGroups: SharedCategoryPresentation[] = [];
   const emptySharedCategoryCounts: SharedCategoryCount[] = [];
 
@@ -191,8 +195,8 @@ export function buildSkillPresentation(
 
   const agentScopedSkills =
     agentFilter === "all"
-      ? skills
-      : skills.filter((skill) => skill.agent === agentFilter);
+      ? presentationSkills
+      : presentationSkills.filter((skill) => skill.agent === agentFilter);
 
   if (agentFilter !== "all") {
     const presentedAgentSkills = agentScopedSkills;

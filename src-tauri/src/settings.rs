@@ -47,6 +47,10 @@ pub enum StartupView {
     Antigravity,
     #[serde(rename = "Codex")]
     Codex,
+    #[serde(rename = "Cursor")]
+    Cursor,
+    #[serde(rename = "Bin")]
+    Bin,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, Default)]
@@ -64,6 +68,7 @@ pub enum StartupStatusFilter {
 #[serde(default)]
 pub struct AppSettings {
     pub shared_library_path: String,
+    pub bin_path: String,
     pub theme_mode: ThemeMode,
     pub reduce_motion: bool,
     pub categorization_enabled: bool,
@@ -83,6 +88,7 @@ impl Default for AppSettings {
     fn default() -> Self {
         Self {
             shared_library_path: default_shared_library_path(),
+            bin_path: default_bin_path(),
             theme_mode: ThemeMode::Dark,
             reduce_motion: false,
             categorization_enabled: false,
@@ -104,6 +110,18 @@ fn default_shared_library_path() -> String {
     dirs::home_dir()
         .unwrap_or_else(|| PathBuf::from("~"))
         .join("SharedSkills")
+        .to_string_lossy()
+        .to_string()
+}
+
+pub(crate) fn default_bin_path() -> String {
+    config_root()
+        .unwrap_or_else(|_| {
+            dirs::home_dir()
+                .unwrap_or_else(|| PathBuf::from("~"))
+                .join(".skill-gate")
+        })
+        .join("bin")
         .to_string_lossy()
         .to_string()
 }
@@ -149,20 +167,26 @@ fn expand_home_prefix(value: &str) -> Result<PathBuf, String> {
     Ok(PathBuf::from(value))
 }
 
-pub(crate) fn normalize_shared_library_path(raw: &str) -> Result<String, String> {
+fn normalize_absolute_folder_path(raw: &str, label: &str) -> Result<String, String> {
     let trimmed = raw.trim();
     if trimmed.is_empty() {
-        return Err(String::from("Shared Library folder cannot be empty"));
+        return Err(format!("{} folder cannot be empty", label));
     }
 
     let expanded = expand_home_prefix(trimmed)?;
     if !expanded.is_absolute() {
-        return Err(String::from(
-            "Shared Library folder must be an absolute path",
-        ));
+        return Err(format!("{} folder must be an absolute path", label));
     }
 
     Ok(expanded.to_string_lossy().to_string())
+}
+
+pub(crate) fn normalize_shared_library_path(raw: &str) -> Result<String, String> {
+    normalize_absolute_folder_path(raw, "Shared Library")
+}
+
+pub(crate) fn normalize_bin_path(raw: &str) -> Result<String, String> {
+    normalize_absolute_folder_path(raw, "Bin")
 }
 
 pub(crate) fn settings_path() -> Result<PathBuf, String> {
@@ -186,6 +210,8 @@ pub(crate) fn load_settings_from_path(path: &Path) -> Result<AppSettings, String
 
     settings.shared_library_path = normalize_shared_library_path(&settings.shared_library_path)
         .unwrap_or_else(|_| default_shared_library_path());
+    settings.bin_path =
+        normalize_bin_path(&settings.bin_path).unwrap_or_else(|_| default_bin_path());
 
     Ok(settings)
 }
@@ -201,6 +227,7 @@ pub(crate) fn save_settings_to_path(
     let mut normalized = settings.clone();
     normalized.shared_library_path =
         normalize_shared_library_path(&normalized.shared_library_path)?;
+    normalized.bin_path = normalize_bin_path(&normalized.bin_path)?;
 
     ensure_parent_dir(path)?;
     let content = serde_json::to_string_pretty(&normalized)
@@ -268,8 +295,8 @@ pub(crate) fn save_browser_session_state(state: &BrowserSessionState) -> Result<
 #[cfg(test)]
 mod tests {
     use super::{
-        load_settings_from_path, normalize_shared_library_path, save_settings_to_path, AppSettings,
-        ThemeMode,
+        load_settings_from_path, normalize_bin_path, normalize_shared_library_path,
+        save_settings_to_path, AppSettings, ThemeMode,
     };
     use std::fs;
     use std::path::Path;
@@ -311,6 +338,19 @@ mod tests {
     }
 
     #[test]
+    fn home_prefixed_bin_path_is_expanded_and_trimmed() {
+        let normalized = normalize_bin_path("  ~/SkillBin  ").unwrap();
+        assert!(
+            Path::new(&normalized).is_absolute(),
+            "Bin path should be absolute after normalization"
+        );
+        assert!(
+            normalized.ends_with("SkillBin"),
+            "normalized path should keep the requested Bin folder name"
+        );
+    }
+
+    #[test]
     fn save_settings_normalizes_the_shared_library_path() {
         let path = temp_dir("save").join("settings.json");
         let settings = AppSettings {
@@ -321,5 +361,37 @@ mod tests {
         let saved = save_settings_to_path(&path, &settings).unwrap();
         assert!(Path::new(&saved.shared_library_path).is_absolute());
         assert!(path.exists(), "settings file should be written");
+    }
+
+    #[test]
+    fn save_settings_normalizes_the_bin_path() {
+        let path = temp_dir("save-bin").join("settings.json");
+        let settings = AppSettings {
+            bin_path: String::from("~/SkillBin"),
+            ..AppSettings::default()
+        };
+
+        let saved = save_settings_to_path(&path, &settings).unwrap();
+        assert!(Path::new(&saved.bin_path).is_absolute());
+        assert!(
+            saved.bin_path.ends_with("SkillBin"),
+            "custom Bin folder should be persisted after normalization"
+        );
+    }
+
+    #[test]
+    fn load_settings_falls_back_when_bin_path_is_invalid() {
+        let path = temp_dir("load-bin").join("settings.json");
+        let settings = AppSettings {
+            bin_path: String::from("/tmp/SkillBin"),
+            ..AppSettings::default()
+        };
+        let mut content = serde_json::to_value(settings).unwrap();
+        content["bin_path"] = serde_json::Value::String(String::from("relative-bin"));
+        fs::write(&path, serde_json::to_string_pretty(&content).unwrap()).unwrap();
+
+        let loaded = load_settings_from_path(&path).unwrap();
+
+        assert_eq!(loaded.bin_path, AppSettings::default().bin_path);
     }
 }

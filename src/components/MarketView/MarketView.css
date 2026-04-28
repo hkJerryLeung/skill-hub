@@ -142,6 +142,27 @@
   flex-shrink: 0;
 }
 
+.market-icon-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 34px;
+  height: 34px;
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-md);
+  background: var(--bg-surface);
+  color: var(--text-primary);
+  cursor: pointer;
+  transition:
+    border-color var(--duration-fast) var(--ease-out),
+    background var(--duration-fast) var(--ease-out);
+}
+
+.market-icon-btn:hover {
+  border-color: var(--border-strong);
+  background: var(--bg-hover);
+}
+
 .market-grid {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
@@ -366,6 +387,201 @@
   max-width: none;
 }
 
+.market-view.ai-install-view {
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.ai-install-topbar {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--sp-4);
+  flex-shrink: 0;
+}
+
+.ai-install-title h2 {
+  font-size: var(--font-2xl);
+}
+
+.ai-install-chat {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  min-height: 0;
+}
+
+.ai-install-thread {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  gap: var(--sp-5);
+  width: min(900px, 100%);
+  min-height: 0;
+  margin: 0 auto;
+  padding: var(--sp-6) 0;
+  overflow-y: auto;
+}
+
+.ai-install-empty {
+  display: flex;
+  flex: 1;
+  min-height: 320px;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: var(--sp-4);
+  color: var(--text-secondary);
+  text-align: center;
+}
+
+.ai-install-empty .icon {
+  color: var(--accent-secondary);
+}
+
+.ai-install-empty h3 {
+  color: var(--text-primary);
+  font-size: var(--font-2xl);
+  font-weight: 600;
+}
+
+.ai-install-message {
+  display: flex;
+  width: 100%;
+}
+
+.ai-install-message.user {
+  justify-content: flex-end;
+}
+
+.ai-install-message.assistant {
+  justify-content: flex-start;
+}
+
+.ai-install-bubble {
+  width: fit-content;
+  max-width: min(720px, 100%);
+  padding: var(--sp-4) var(--sp-5);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-lg);
+  background: var(--bg-panel);
+  color: var(--text-primary);
+  line-height: 1.6;
+  overflow-wrap: anywhere;
+}
+
+.ai-install-message.user .ai-install-bubble {
+  background: var(--bg-elevated);
+}
+
+.ai-install-message.assistant .ai-install-bubble {
+  width: min(760px, 100%);
+  background: transparent;
+  border-color: transparent;
+  padding-left: 0;
+  padding-right: 0;
+}
+
+.ai-install-bubble.muted {
+  color: var(--text-secondary);
+}
+
+.ai-install-bubble > p {
+  margin-bottom: var(--sp-4);
+  color: var(--text-primary);
+}
+
+.ai-install-recommendations {
+  display: grid;
+  gap: var(--sp-4);
+}
+
+.ai-install-recommendation {
+  display: grid;
+  gap: var(--sp-4);
+  padding: var(--sp-5);
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-lg);
+  background: var(--bg-panel);
+}
+
+.ai-install-recommendation h3 {
+  font-size: var(--font-lg);
+  overflow-wrap: anywhere;
+}
+
+.ai-install-recommendation p {
+  margin: 0;
+  color: var(--text-secondary);
+  line-height: 1.55;
+}
+
+.ai-install-composer {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: var(--sp-3);
+  width: min(900px, 100%);
+  margin: 0 auto;
+  padding: var(--sp-3);
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-lg);
+  background: var(--bg-surface);
+  box-shadow: var(--shadow-md);
+}
+
+.ai-install-composer textarea {
+  width: 100%;
+  min-height: 64px;
+  max-height: 180px;
+  padding: 8px 10px;
+  border: 0;
+  background: transparent;
+  color: var(--text-primary);
+  font: inherit;
+  line-height: 1.5;
+  resize: vertical;
+  outline: none;
+}
+
+.ai-install-composer .market-btn {
+  align-self: end;
+  min-width: 92px;
+  justify-content: center;
+}
+
+.ai-install-settings-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 180;
+  display: flex;
+  align-items: flex-start;
+  justify-content: flex-end;
+  padding: var(--sp-6) var(--sp-8);
+  background: color-mix(in srgb, var(--bg-darkest) 72%, transparent);
+}
+
+.ai-install-settings-dialog {
+  width: min(560px, 100%);
+  padding: var(--sp-5);
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-lg);
+  background: var(--bg-panel);
+  box-shadow: var(--shadow-lg);
+}
+
+.ai-install-settings-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--sp-4);
+  margin-bottom: var(--sp-5);
+}
+
+.ai-install-settings-header h3 {
+  font-size: var(--font-xl);
+}
+
 .market-error-note {
   margin-top: var(--sp-4);
   margin-bottom: var(--sp-4);
@@ -431,6 +647,10 @@
     flex-direction: column;
   }
 
+  .ai-install-topbar {
+    flex-direction: column;
+  }
+
   .market-hero-actions {
     width: 100%;
     justify-content: flex-start;
@@ -450,6 +670,10 @@
   .github-field.full {
     grid-column: auto;
   }
+
+  .ai-install-settings-backdrop {
+    padding: var(--sp-4);
+  }
 }
 
 @media (max-width: 1200px) {
@@ -461,5 +685,13 @@
 @media (max-width: 720px) {
   .market-card-actions {
     grid-template-columns: 1fr;
+  }
+
+  .ai-install-composer {
+    grid-template-columns: 1fr;
+  }
+
+  .ai-install-composer .market-btn {
+    width: 100%;
   }
 }

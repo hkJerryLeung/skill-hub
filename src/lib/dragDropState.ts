@@ -4,6 +4,7 @@ export type DragSidebarTarget =
   | "Antigravity"
   | "Codex"
   | "Cursor"
+  | "Bin"
   | "Shared Library"
   | `shared-category:${string}`;
 
@@ -123,6 +124,7 @@ export function resolveSidebarDropTargetKey(
     case "Antigravity":
     case "Codex":
     case "Cursor":
+    case "Bin":
       return agentKey;
     default:
       return null;

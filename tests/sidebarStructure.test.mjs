@@ -21,5 +21,20 @@ assert.doesNotMatch(
   /sidebar-subtree/,
   "Sidebar should not render a Shared Library category subtree",
 );
+assert.match(
+  sidebarSource,
+  /TrashIcon/,
+  "Sidebar should import the bin icon from the local icon catalogue",
+);
+assert.match(
+  sidebarSource,
+  /\{ key: "Bin", label: "Bin", Icon: TrashIcon \}/,
+  "Agents section should include Bin as the last agent row",
+);
+assert.match(
+  sidebarSource,
+  /"Cursor"[\s\S]*"Bin"[\s\S]*\]/,
+  "Bin should be listed after Cursor in the Agents section",
+);
 
 console.log("sidebarStructure test passed");

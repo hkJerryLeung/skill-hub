@@ -75,8 +75,8 @@ export const buildSkillMenuItems = ({
     danger: isSingle
       ? [
           {
-            id: "remove",
-            label: `Remove from ${first.agent}`,
+            id: first.agent === "Bin" ? "delete-permanently" : "remove",
+            label: first.agent === "Bin" ? "Delete Permanently" : "Move to Bin",
             tone: "danger",
           },
         ]

@@ -8,6 +8,15 @@ use local_scout::{LocalSkillModel, SkillScoutRequest, SkillScoutResponse};
 use market::RemoteMarketEntry;
 use scanner::{AgentTarget, SkillInfo};
 use settings::{AppInfo, AppSettings, BrowserSessionState};
+use tauri::{Manager, Runtime};
+
+fn focus_main_window<R: Runtime>(app: &tauri::AppHandle<R>) {
+    if let Some(window) = app.get_webview_window("main") {
+        let _ = window.unminimize();
+        let _ = window.show();
+        let _ = window.set_focus();
+    }
+}
 
 #[tauri::command]
 fn scan_skills() -> Vec<SkillInfo> {
@@ -33,7 +42,10 @@ fn get_agent_targets() -> Vec<AgentTarget> {
 }
 
 #[tauri::command]
-fn fetch_remote_market(source: String, force_refresh: Option<bool>) -> Result<Vec<RemoteMarketEntry>, String> {
+fn fetch_remote_market(
+    source: String,
+    force_refresh: Option<bool>,
+) -> Result<Vec<RemoteMarketEntry>, String> {
     market::fetch_remote_market(&source, force_refresh.unwrap_or(false))
 }
 
@@ -123,6 +135,11 @@ fn uninstall_skill(skill_path: String) -> Result<String, String> {
 }
 
 #[tauri::command]
+fn move_skill_to_bin(skill_path: String) -> Result<String, String> {
+    scanner::move_skill_to_bin(&skill_path)
+}
+
+#[tauri::command]
 fn batch_migrate_skills(skills: Vec<SkillInfo>, target_agent: String) -> Result<String, String> {
     scanner::batch_migrate_skills(skills, &target_agent)
 }
@@ -143,6 +160,9 @@ fn auto_categorize_shared_skills(skill_paths: Vec<String>) -> Result<String, Str
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
+        .plugin(tauri_plugin_single_instance::init(|app, _argv, _cwd| {
+            focus_main_window(app);
+        }))
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_process::init())
@@ -166,6 +186,7 @@ pub fn run() {
             install_skill_to_shared_category,
             install_skill_from_github,
             uninstall_skill,
+            move_skill_to_bin,
             batch_migrate_skills,
             move_shared_skill_to_category,
             auto_categorize_shared_skills,
